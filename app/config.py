@@ -9,11 +9,14 @@ class Settings(BaseSettings):
     tz: str = "Europe/Berlin"
     database_path: str = "/data/releases.sqlite3"
     read_only: bool = True
-    preferred_provider: str = "tmdb_de"
+    preferred_provider: str = "tvmaze_de"
 
     # TMDB API Read Access Token.
     tmdb_api_token: str | None = None
     tmdb_base_url: str = "https://api.themoviedb.org/3"
+
+    # TVmaze public API. No API key is required.
+    tvmaze_base_url: str = "https://api.tvmaze.com"
 
     model_config = SettingsConfigDict(extra="ignore")
 
