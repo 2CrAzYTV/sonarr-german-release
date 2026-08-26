@@ -17,15 +17,16 @@ from .db import (
     upsert_episode_release,
     episode_release_map,
 )
-from .providers import TmdbProvider, TvmazeProvider
+from .providers import TmdbProvider, TvmazeProvider, WikimediaProvider
 from .resolver import resolve_release
 from .sonarr import SonarrClient
 
-app = FastAPI(title="Sonarr German Release", version="0.3.0")
+app = FastAPI(title="Sonarr German Release", version="0.3.1")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 tmdb = TmdbProvider()
 tvmaze = TvmazeProvider()
+wikipedia = WikimediaProvider()
 
 
 def format_datetime_de(value: str | None) -> str:
@@ -58,14 +59,16 @@ def startup():
 async def health():
     tmdb_status = tmdb.status()
     tvmaze_status = tvmaze.status()
+    wikipedia_status = wikipedia.status()
     return {
         "status": "ok",
-        "version": "0.3.0",
+        "version": "0.3.1",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
         "tmdb_api_configured": tmdb_status.configured,
         "tvmaze_active": tvmaze_status.active,
+        "wikipedia_de_active": wikipedia_status.active,
     }
 
 
@@ -136,6 +139,75 @@ async def enrich_streaming_de(episodes: list[dict]) -> dict:
         episode["streamingDE"] = season_results.get(key)
 
     return {"checked": checked, "available": available, "errors": errors}
+
+
+async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
+    """Store only explicit German first-air dates found in de.wikipedia tables."""
+    checked = 0
+    wikidata_mapped = 0
+    dewiki_pages = 0
+    pages_checked = 0
+    release_dates = 0
+    errors = 0
+
+    grouped: dict[int, list[dict]] = {}
+    for episode in episodes:
+        series_id = episode.get("seriesId")
+        if series_id:
+            grouped.setdefault(series_id, []).append(episode)
+
+    for sonarr_series_id, series_episodes in grouped.items():
+        series = series_by_id.get(sonarr_series_id) or {}
+        imdb_id = series.get("imdbId") or None
+        tvdb_id = series.get("tvdbId") or None
+        if not imdb_id and not tvdb_id:
+            continue
+
+        checked += 1
+        try:
+            payload = await wikipedia.german_episode_dates(
+                imdb_id=imdb_id,
+                tvdb_id=tvdb_id,
+            )
+            mapping = payload.get("mapping") or {}
+            dates = payload.get("dates") or {}
+            pages_checked += payload.get("pages_checked") or 0
+
+            if mapping.get("qid"):
+                wikidata_mapped += 1
+            if mapping.get("dewiki_title"):
+                dewiki_pages += 1
+
+            for episode in series_episodes:
+                episode["wikidataQid"] = mapping.get("qid")
+                episode["wikipediaDETitle"] = mapping.get("dewiki_title")
+                episode["wikipediaDEUrl"] = mapping.get("dewiki_url")
+
+                key = (episode.get("seasonNumber"), episode.get("episodeNumber"))
+                observation = dates.get(key)
+                if not observation:
+                    continue
+
+                upsert_episode_release(
+                    episode,
+                    provider="wikipedia_de",
+                    release_date=observation["release_date"],
+                    confidence=observation["confidence"],
+                    note=observation["note"],
+                )
+                episode["wikipediaDE"] = observation
+                release_dates += 1
+        except Exception:
+            errors += 1
+
+    return {
+        "checked": checked,
+        "wikidata_mapped": wikidata_mapped,
+        "dewiki_pages": dewiki_pages,
+        "pages_checked": pages_checked,
+        "release_dates": release_dates,
+        "errors": errors,
+    }
 
 
 async def enrich_tvmaze_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
@@ -210,6 +282,14 @@ async def dashboard(request: Request):
     tmdb_sync = {"checked": 0, "mapped": 0, "errors": 0}
     streaming_sync = {"checked": 0, "available": 0, "errors": 0}
     tvmaze_sync = {"checked": 0, "mapped": 0, "de_lists": 0, "release_dates": 0, "errors": 0}
+    wikipedia_sync = {
+        "checked": 0,
+        "wikidata_mapped": 0,
+        "dewiki_pages": 0,
+        "pages_checked": 0,
+        "release_dates": 0,
+        "errors": 0,
+    }
     release_data = {}
     resolved = {}
 
@@ -239,6 +319,7 @@ async def dashboard(request: Request):
             )
             episode["tmdbSeriesId"] = get_tmdb_mapping(episode.get("seriesId"))
 
+        wikipedia_sync = await enrich_wikipedia_de(episodes, series_by_id)
         tvmaze_sync = await enrich_tvmaze_de(episodes, series_by_id)
         streaming_sync = await enrich_streaming_de(episodes)
 
@@ -266,8 +347,10 @@ async def dashboard(request: Request):
             "tmdb_sync": tmdb_sync,
             "streaming_sync": streaming_sync,
             "tvmaze_sync": tvmaze_sync,
+            "wikipedia_sync": wikipedia_sync,
             "tmdb": tmdb.status(),
             "tvmaze": tvmaze.status(),
+            "wikipedia": wikipedia.status(),
             "settings": settings,
         },
     )
