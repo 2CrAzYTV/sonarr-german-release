@@ -28,24 +28,37 @@ class WikimediaProvider:
     wikidata_sparql_url = "https://query.wikidata.org/sparql"
     dewiki_api_url = "https://de.wikipedia.org/w/api.php"
     user_agent = (
-        "SonarrGermanRelease/0.3.1 "
+        "SonarrGermanRelease/0.3.2 "
         "(https://github.com/2CrAzYTV/sonarr-german-release)"
     )
 
     month_names = {
         "januar": 1,
+        "jan": 1,
         "februar": 2,
+        "feb": 2,
         "märz": 3,
         "maerz": 3,
+        "mär": 3,
+        "mrz": 3,
         "april": 4,
+        "apr": 4,
         "mai": 5,
         "juni": 6,
+        "jun": 6,
         "juli": 7,
+        "jul": 7,
         "august": 8,
+        "aug": 8,
         "september": 9,
+        "sep": 9,
+        "sept": 9,
         "oktober": 10,
+        "okt": 10,
         "november": 11,
+        "nov": 11,
         "dezember": 12,
+        "dez": 12,
     }
 
     def __init__(self):
@@ -58,7 +71,7 @@ class WikimediaProvider:
             name=self.name,
             configured=True,
             active=True,
-            note="Kostenlose Wikimedia APIs · kein API-Key erforderlich",
+            note="Kostenlose Wikimedia APIs · erweiterter DE-Episodenparser · kein API-Key",
         )
 
     async def _get_json(self, url: str, params: dict) -> dict:
@@ -108,7 +121,6 @@ LIMIT 5
             self._mapping_cache[key] = None
             return None
 
-        # Prefer a match that has a German Wikipedia sitelink.
         rows.sort(key=lambda row: 0 if row.get("article") else 1)
         row = rows[0]
         item_url = ((row.get("item") or {}).get("value") or "")
@@ -139,16 +151,48 @@ LIMIT 5
             },
         )
 
+    async def _search_pages(self, title: str) -> list[str]:
+        """Use MediaWiki search to find likely episode-list pages."""
+        base = re.sub(r"\s*\([^)]*\)\s*$", "", title).strip()
+        queries = [
+            f'intitle:Episodenliste "{base}"',
+            f'intitle:Staffel "{base}"',
+            f'"{base}" Episodenliste',
+        ]
+        results: list[str] = []
+        for query in queries:
+            try:
+                data = await self._get_json(
+                    self.dewiki_api_url,
+                    {
+                        "action": "query",
+                        "list": "search",
+                        "srsearch": query,
+                        "srnamespace": 0,
+                        "srlimit": 5,
+                        "format": "json",
+                        "formatversion": 2,
+                    },
+                )
+            except Exception:
+                continue
+            for item in ((data.get("query") or {}).get("search") or []):
+                page_title = item.get("title")
+                if page_title and page_title not in results:
+                    results.append(page_title)
+        return results
+
     async def page_candidates(self, title: str) -> list[str]:
-        """Return the article plus likely episode/season subpages."""
+        """Return article plus linked/searched episode and season pages."""
+        candidates = [title]
         try:
             data = await self._parse_page(title, prop="links")
+            links = ((data.get("parse") or {}).get("links") or [])
         except Exception:
-            return [title]
+            links = []
 
-        candidates = [title]
-        links = ((data.get("parse") or {}).get("links") or [])
-        base = title.split("(", 1)[0].strip().lower()
+        base = re.sub(r"\s*\([^)]*\)\s*$", "", title).strip().lower()
+        base_words = [word for word in re.split(r"\W+", base) if len(word) >= 4]
 
         for item in links:
             link_title = item.get("title") or ""
@@ -156,15 +200,20 @@ LIMIT 5
             likely_episode_page = (
                 "episodenliste" in low
                 or "liste der episoden" in low
+                or "liste von episoden" in low
                 or bool(re.search(r"\bstaffel\s*\d+\b", low))
             )
-            related = base and (base[:18] in low or low.startswith(base[:12]))
+            related = not base_words or any(word in low for word in base_words[:3])
             if likely_episode_page and related and link_title not in candidates:
                 candidates.append(link_title)
-            if len(candidates) >= 8:
-                break
 
-        return candidates
+        for page_title in await self._search_pages(title):
+            low = page_title.lower()
+            related = not base_words or any(word in low for word in base_words[:3])
+            if related and page_title not in candidates:
+                candidates.append(page_title)
+
+        return candidates[:12]
 
     async def page_html(self, title: str) -> str:
         if title in self._page_cache:
@@ -176,23 +225,86 @@ LIMIT 5
 
     @staticmethod
     def _clean_text(value: str) -> str:
-        return re.sub(r"\s+", " ", value.replace("\xa0", " ")).strip()
+        value = value.replace("\xa0", " ").replace("\u202f", " ")
+        return re.sub(r"\s+", " ", value).strip()
 
     @staticmethod
-    def _expanded_cells(row) -> list[str]:
-        result = []
-        for cell in row.find_all(["th", "td"], recursive=False):
-            text = WikimediaProvider._clean_text(cell.get_text(" ", strip=True))
-            try:
-                colspan = max(1, int(cell.get("colspan", 1)))
-            except (TypeError, ValueError):
-                colspan = 1
-            result.extend([text] * colspan)
-        return result
+    def _cell_text(cell) -> str:
+        return WikimediaProvider._clean_text(cell.get_text(" ", strip=True))
+
+    def _table_grid(self, table) -> tuple[list[list[str]], list[bool]]:
+        """Expand rowspan/colspan into a rectangular text grid.
+
+        Wikipedia episode tables often use rowspan/colspan in both header and
+        data rows. Expanding them first keeps column positions stable.
+        """
+        grid: list[list[str]] = []
+        header_flags: list[bool] = []
+        pending: dict[int, tuple[int, str]] = {}
+
+        rows = table.find_all("tr")
+        for row in rows:
+            direct_cells = row.find_all(["th", "td"], recursive=False)
+            if not direct_cells:
+                direct_cells = row.find_all(["th", "td"])
+            if not direct_cells and not pending:
+                continue
+
+            values: list[str] = []
+            col = 0
+            cells = iter(direct_cells)
+            current = next(cells, None)
+
+            while current is not None or pending:
+                if col in pending:
+                    remaining, text = pending[col]
+                    values.append(text)
+                    if remaining <= 1:
+                        del pending[col]
+                    else:
+                        pending[col] = (remaining - 1, text)
+                    col += 1
+                    continue
+
+                if current is None:
+                    next_pending = [key for key in pending if key > col]
+                    if not next_pending:
+                        break
+                    while col < min(next_pending):
+                        values.append("")
+                        col += 1
+                    continue
+
+                text = self._cell_text(current)
+                try:
+                    colspan = max(1, int(current.get("colspan", 1)))
+                except (TypeError, ValueError):
+                    colspan = 1
+                try:
+                    rowspan = max(1, int(current.get("rowspan", 1)))
+                except (TypeError, ValueError):
+                    rowspan = 1
+
+                for offset in range(colspan):
+                    values.append(text)
+                    if rowspan > 1:
+                        pending[col + offset] = (rowspan - 1, text)
+                col += colspan
+                current = next(cells, None)
+
+            grid.append(values)
+            header_flags.append(any(cell.name == "th" for cell in direct_cells))
+
+        width = max((len(row) for row in grid), default=0)
+        for row in grid:
+            row.extend([""] * (width - len(row)))
+        return grid, header_flags
 
     def _date_to_iso(self, text: str) -> str | None:
         clean = self._clean_text(text)
-        numeric = re.search(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b", clean)
+        clean = re.sub(r"\[[^\]]+\]", "", clean)
+
+        numeric = re.search(r"\b(\d{1,2})\s*\.\s*(\d{1,2})\s*\.\s*(\d{4})\b", clean)
         if numeric:
             day, month, year = map(int, numeric.groups())
             try:
@@ -201,13 +313,17 @@ LIMIT 5
                 return None
 
         named = re.search(
-            r"\b(\d{1,2})\.\s*(Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(\d{4})\b",
+            r"\b(\d{1,2})\.\s*"
+            r"(Januar|Jan\.?|Februar|Feb\.?|März|Maerz|Mär\.?|Mrz\.?|April|Apr\.?|Mai|"
+            r"Juni|Jun\.?|Juli|Jul\.?|August|Aug\.?|September|Sept?\.?|Oktober|Okt\.?|"
+            r"November|Nov\.?|Dezember|Dez\.?)\s+(\d{4})\b",
             clean,
             flags=re.IGNORECASE,
         )
         if named:
             day = int(named.group(1))
-            month = self.month_names.get(named.group(2).lower())
+            month_name = named.group(2).lower().replace(".", "")
+            month = self.month_names.get(month_name)
             year = int(named.group(3))
             if month:
                 try:
@@ -226,109 +342,161 @@ LIMIT 5
         if heading:
             contexts.append(heading.get_text(" ", strip=True))
 
+        patterns = [
+            r"\bStaffel\s*(\d+)\b",
+            r"\b(\d+)\.\s*Staffel\b",
+            r"\bSeason\s*(\d+)\b",
+        ]
         for context in contexts:
-            match = re.search(r"\bStaffel\s*(\d+)\b", context, flags=re.IGNORECASE)
-            if match:
-                return int(match.group(1))
+            for pattern in patterns:
+                match = re.search(pattern, context, flags=re.IGNORECASE)
+                if match:
+                    return int(match.group(1))
         return None
 
     @staticmethod
-    def _header_score(text: str, kind: str) -> int:
+    def _normal_header(text: str) -> str:
         low = text.lower()
+        low = low.replace("–", "-").replace("—", "-")
+        low = re.sub(r"[\[\]{}()]", " ", low)
+        low = re.sub(r"\s+", " ", low)
+        return low.strip()
+
+    @classmethod
+    def _header_score(cls, text: str, kind: str) -> int:
+        low = cls._normal_header(text)
+
         if kind == "de_date":
-            if "deutsche erstausstrahlung" in low or "deutschsprachige erstausstrahlung" in low:
+            exact = (
+                "deutsche erstausstrahlung",
+                "deutschsprachige erstausstrahlung",
+                "deutsche premiere",
+                "deutschsprachige premiere",
+                "de premiere",
+                "premiere de",
+            )
+            if any(value in low for value in exact):
                 return 100
-            if "erstausstrahlung" in low and ("deutsch" in low or "deutschland" in low):
+            if "erstausstrahlung" in low and any(
+                value in low for value in ("deutsch", "deutschland", "de ", " d ")
+            ):
+                return 95
+            if any(value in low for value in ("deutschland", "deutschsprachig")) and any(
+                value in low for value in ("ausstrahlung", "premiere", "start")
+            ):
                 return 90
-            if "deutschland" in low and ("ausstrahlung" in low or "premiere" in low):
-                return 80
+            if re.search(r"\b(?:dt|de|d)\.?\s*(?:erstausstrahlung|premiere)\b", low):
+                return 88
+
         if kind == "episode":
-            if "nr. (st.)" in low or "nr. (staffel" in low or "nr. in staffel" in low:
+            if any(value in low for value in (
+                "nr. st.", "nr st.", "nr. staffel", "nr staffel",
+                "nr. in staffel", "nr in staffel", "episode in staffel",
+                "folge in staffel",
+            )):
                 return 100
+            if "staffelfolge" in low:
+                return 95
             if "folge" in low and "gesamt" not in low:
                 return 80
             if "episode" in low and "gesamt" not in low:
-                return 70
+                return 75
+
+        if kind == "season":
+            if low in ("staffel", "staffel nr.", "staffelnr.", "staffelnummer", "season"):
+                return 100
+            if "staffel" in low and "nr" in low:
+                return 90
+
         return 0
 
-    def extract_german_dates(self, page_title: str, html: str) -> dict[tuple[int, int], dict]:
+    @staticmethod
+    def _first_int(text: str) -> int | None:
+        match = re.search(r"\b(\d{1,3})\b", text)
+        return int(match.group(1)) if match else None
+
+    def extract_german_dates(self, page_title: str, html: str) -> tuple[dict[tuple[int, int], dict], dict]:
         """Extract only explicitly Germany-labelled first-air dates."""
         soup = BeautifulSoup(html, "html.parser")
         result: dict[tuple[int, int], dict] = {}
         page_url = f"https://de.wikipedia.org/wiki/{quote(page_title.replace(' ', '_'))}"
+        stats = {
+            "tables_seen": 0,
+            "de_tables": 0,
+            "dated_rows": 0,
+            "matched_rows": 0,
+        }
 
         for table in soup.find_all("table"):
-            rows = table.find_all("tr", recursive=False)
-            if not rows:
-                rows = table.find_all("tr")
-            if len(rows) < 2:
+            stats["tables_seen"] += 1
+            grid, header_flags = self._table_grid(table)
+            if len(grid) < 2:
                 continue
 
-            header_rows = []
-            data_start = 0
-            for index, row in enumerate(rows[:5]):
-                cells = row.find_all(["th", "td"], recursive=False)
-                if not cells:
-                    cells = row.find_all(["th", "td"])
-                has_td = any(cell.name == "td" for cell in cells)
-                if has_td:
-                    data_start = index
+            header_indices: list[int] = []
+            for index, is_header in enumerate(header_flags[:6]):
+                if is_header:
+                    header_indices.append(index)
+                elif header_indices:
                     break
-                header_rows.append(self._expanded_cells(row))
-                data_start = index + 1
-
-            width = max((len(row) for row in header_rows), default=0)
-            if width == 0:
+            if not header_indices:
                 continue
+
+            width = max(len(grid[index]) for index in header_indices)
             combined_headers = []
             for col in range(width):
                 parts = []
-                for header in header_rows:
-                    if col < len(header) and header[col] and header[col] not in parts:
-                        parts.append(header[col])
+                for row_index in header_indices:
+                    value = grid[row_index][col] if col < len(grid[row_index]) else ""
+                    if value and value not in parts:
+                        parts.append(value)
                 combined_headers.append(" ".join(parts))
 
             de_scores = [self._header_score(text, "de_date") for text in combined_headers]
             if not de_scores or max(de_scores) == 0:
                 continue
             de_col = de_scores.index(max(de_scores))
+            stats["de_tables"] += 1
 
             ep_scores = [self._header_score(text, "episode") for text in combined_headers]
             ep_col = ep_scores.index(max(ep_scores)) if ep_scores and max(ep_scores) else None
 
-            # If there are two generic Nr. columns, the second usually means
-            # the number within the season. Use it only when no stronger label exists.
+            season_scores = [self._header_score(text, "season") for text in combined_headers]
+            season_col = season_scores.index(max(season_scores)) if season_scores and max(season_scores) else None
+
             if ep_col is None:
                 nr_cols = [
                     index for index, text in enumerate(combined_headers)
-                    if re.search(r"\bnr\.?\b", text.lower())
+                    if re.search(r"\bnr\.?\b", self._normal_header(text))
                 ]
                 if nr_cols:
                     ep_col = nr_cols[1] if len(nr_cols) > 1 else nr_cols[0]
 
-            season = self._season_from_context(table, page_title)
+            context_season = self._season_from_context(table, page_title)
+            data_start = max(header_indices) + 1
 
-            for row in rows[data_start:]:
-                cells = self._expanded_cells(row)
-                if de_col >= len(cells):
+            for values in grid[data_start:]:
+                if de_col >= len(values):
                     continue
-                release_date = self._date_to_iso(cells[de_col])
+                release_date = self._date_to_iso(values[de_col])
                 if not release_date:
                     continue
+                stats["dated_rows"] += 1
 
-                row_text = self._clean_text(row.get_text(" ", strip=True))
-                row_season = season
+                row_text = self._clean_text(" ".join(values))
+                row_season = context_season
                 episode_number = None
 
-                se_match = re.search(r"\bS(\d{1,2})E(\d{1,3})\b", row_text, flags=re.IGNORECASE)
+                se_match = re.search(r"\bS(\d{1,2})\s*E(\d{1,3})\b", row_text, flags=re.IGNORECASE)
                 if se_match:
                     row_season = int(se_match.group(1))
                     episode_number = int(se_match.group(2))
 
-                if episode_number is None and ep_col is not None and ep_col < len(cells):
-                    ep_match = re.search(r"\b(\d{1,3})\b", cells[ep_col])
-                    if ep_match:
-                        episode_number = int(ep_match.group(1))
+                if row_season is None and season_col is not None and season_col < len(values):
+                    row_season = self._first_int(values[season_col])
+
+                if episode_number is None and ep_col is not None and ep_col < len(values):
+                    episode_number = self._first_int(values[ep_col])
 
                 if row_season is None or episode_number is None:
                     continue
@@ -340,8 +508,9 @@ LIMIT 5
                     "source_url": page_url,
                     "page_title": page_title,
                 }
+                stats["matched_rows"] += 1
 
-        return result
+        return result, stats
 
     async def german_episode_dates(
         self,
@@ -350,7 +519,15 @@ LIMIT 5
     ) -> dict:
         mapping = await self.wikidata_match(imdb_id=imdb_id, tvdb_id=tvdb_id)
         if not mapping or not mapping.get("dewiki_title"):
-            return {"mapping": mapping, "dates": {}, "pages_checked": 0}
+            return {
+                "mapping": mapping,
+                "dates": {},
+                "pages_checked": 0,
+                "tables_seen": 0,
+                "de_tables": 0,
+                "dated_rows": 0,
+                "matched_rows": 0,
+            }
 
         title = mapping["dewiki_title"]
         if title in self._dates_cache:
@@ -359,17 +536,26 @@ LIMIT 5
 
         dates: dict[tuple[int, int], dict] = {}
         candidates = await self.page_candidates(title)
-        checked = 0
+        totals = {
+            "pages_checked": 0,
+            "tables_seen": 0,
+            "de_tables": 0,
+            "dated_rows": 0,
+            "matched_rows": 0,
+        }
+
         for candidate in candidates:
             try:
                 html = await self.page_html(candidate)
             except Exception:
                 continue
-            checked += 1
-            extracted = self.extract_german_dates(candidate, html)
+            totals["pages_checked"] += 1
+            extracted, stats = self.extract_german_dates(candidate, html)
+            for key in ("tables_seen", "de_tables", "dated_rows", "matched_rows"):
+                totals[key] += stats.get(key, 0)
             for key, observation in extracted.items():
                 dates.setdefault(key, observation)
 
-        payload = {"dates": dates, "pages_checked": checked}
+        payload = {"dates": dates, **totals}
         self._dates_cache[title] = payload
         return {"mapping": mapping, **payload}
