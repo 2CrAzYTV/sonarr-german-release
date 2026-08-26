@@ -4,97 +4,74 @@ Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichung
 
 ## Aktueller Stand
 
-Version 0.3.0 ist absichtlich **read-only**:
+Version 0.3.1 ist absichtlich **read-only**:
 
 - Verbindung zu Sonarr über API v3
-- Serien aus Sonarr einlesen
-- kommende Episoden aus Sonarr einlesen
-- TVmaze-Mapping über vorhandene IMDb-/TVDB-IDs
-- echte deutsche Country-Premiere-Daten aus TVmaze Alternate Lists
-- TMDB-Mappings über vorhandene externe IDs
-- DE-Streaming-Verfügbarkeit über TMDB Watch Providers / JustWatch
+- Serien und kommende Episoden aus Sonarr einlesen
+- deutsche Episodendaten über kostenlose/keylose Quellen ergänzen
+- Wikidata für exakte Serienzuordnung über IMDb-/TheTVDB-IDs
+- Wikipedia DE für explizit gekennzeichnete deutsche/deutschsprachige Erstausstrahlungsdaten
+- TVmaze DE Alternate Lists als weitere kostenlose Quelle
+- TMDB bleibt optional für Mapping und DE-Streaming-Verfügbarkeit
 - SQLite-Datenbank für mehrere Quellen
-- WebUI intern auf Port 8788
-- Unraid Host-Port 8789
+- Quellenkonflikte werden angezeigt statt still überschrieben
 - keine Änderungen an Sonarr
-- keine Episode wird automatisch auf monitored/unmonitored gesetzt
-- Mehrquellen-Architektur mit Konflikterkennung
 - keine kostenpflichtige IMDb-/AWS-Integration
 
 ## Quellen-Priorität
 
-Das Projekt verlässt sich nicht auf eine einzelne Metadatenquelle.
-
-Priorität:
-
 1. `manual_de` – manuell bestätigte deutsche Daten
-2. `tvmaze_de` – explizite deutsche Country-Premiere-Alternate-Lists
-3. `streaming_de` – Deutschland-spezifische Streaming-Verfügbarkeit
-4. `tmdb_de` – TMDB Mapping/Fallback bzw. zusätzliche Bestätigung
-5. `sonarr_tvdb` – letzter Fallback
+2. `wikipedia_de` – explizite deutsche/deutschsprachige Erstausstrahlung aus Wikipedia-DE-Tabellen
+3. `tvmaze_de` – explizite deutsche TVmaze Country-Premiere-Alternate-Lists
+4. `streaming_de` – Deutschland-spezifische Streaming-Verfügbarkeit
+5. `tmdb_de` – optionales TMDB Mapping/Fallback
+6. `sonarr_tvdb` – letzter Fallback
 
-Jede Quelle wird separat behandelt. Bei unterschiedlichen Datumsangaben wird ein Konflikt angezeigt, statt still eine Quelle zu überschreiben.
+Normale Weltpremieren werden weder von Wikipedia noch TVmaze als deutsches Datum interpretiert.
+
+## Wikidata + Wikipedia DE
+
+Der Wikimedia-Provider benötigt **keinen API-Key** und keine Registrierung.
+
+Wikidata wird ausschließlich für exakte Zuordnungen verwendet:
+
+- IMDb ID (`P345`)
+- TheTVDB series ID (`P4835`)
+- deutscher Wikipedia-Sitelink
+
+Wikipedia DE wird ausschließlich über die offizielle MediaWiki Action API gelesen. Der Parser akzeptiert nur Episodentabellen, deren Spalten ausdrücklich eine deutsche/deutschsprachige Erstausstrahlung kennzeichnen. Wird Staffel/Episode nicht eindeutig erkannt, wird kein Datum gespeichert.
+
+Die WebUI verlinkt die jeweilige deutsche Wikipedia-Seite als Quelle.
+
+### Wikimedia-Lizenzen
+
+- strukturierte Wikidata-Daten: CC0
+- Wikipedia-Texte: grundsätzlich CC BY-SA 4.0 und GFDL gemäß den Wikimedia-Nutzungsbedingungen
+
+Das Projekt übernimmt keine längeren Wikipedia-Texte, sondern nur strukturierte Datumsangaben und Quellenlinks.
 
 ## TVmaze
 
-TVmaze wird über die kostenlose öffentliche REST-API verwendet. Es ist kein API-Key erforderlich.
+TVmaze wird über die kostenlose öffentliche API ohne Schlüssel verwendet. Serien werden exakt über vorhandene IMDb-/TheTVDB-IDs zugeordnet. Als deutsche Releasedaten werden ausschließlich explizite DE-Country-Premiere-Alternate-Lists verwendet.
 
-Die Anwendung nutzt TVmaze nur dann als deutsches Release-Datum, wenn TVmaze für die Serie eine Alternate List mit dem Land `DE` bereitstellt. Normale TVmaze-Episodendaten bzw. Weltpremieren werden nicht automatisch als deutsches Datum interpretiert.
+## TMDB API – optional
 
-Verwendete Funktionen:
+TMDB bleibt vollständig optional. Ohne `TMDB_API_TOKEN` läuft der Container normal weiter; der Provider wird lediglich als deaktiviert angezeigt.
 
-- exaktes Serien-Mapping über vorhandene IMDb- oder TVDB-ID
-- Country-Premiere Alternate Lists für Deutschland
-- Zuordnung der Alternate Episodes zur ursprünglichen Staffel-/Episodennummer
-- Confidence `high`, wenn TVmaze eine Uhrzeit liefert
-- Confidence `medium`, wenn nur das Datum bekannt ist
+Mit Token wird TMDB verwendet für:
 
-Es sind keine zusätzlichen Unraid-Variablen erforderlich.
-
-## TMDB API
-
-TMDB wird bewusst **nicht als alleinige Quelle für deutsche Episoden-Releasedaten** verwendet.
-
-Wichtig: TMDB bietet für TV-Episoden keinen eigenen Deutschland-Release-Date-Endpunkt wie bei Filmen. Das normale Episodenfeld `air_date` wird deshalb **nicht** als deutsches Veröffentlichungsdatum gespeichert.
-
-TMDB wird aktuell verwendet für:
-
-- Zuordnung vorhandener externer Serien-IDs zu einer TMDB-Serie
-- zusätzliche Serien-/Episoden-Metadaten
+- zusätzliche Serien-Mappings
 - DE-Streaming-Verfügbarkeit über Watch Providers / JustWatch
-- spätere Bestätigung anderer kostenloser Quellen
 
-Unraid-Container-Variable:
+Das normale TMDB-Episodenfeld `air_date` wird **nicht** als deutsches Veröffentlichungsdatum gespeichert.
 
-- `TMDB_API_TOKEN` – TMDB API Read Access Token
-
-Ohne Token läuft der Container normal weiter; der TMDB-Provider bleibt deaktiviert.
-
-### Kosten
-
-Die TMDB Developer API ist für **nicht-kommerzielle Nutzung kostenlos**, sofern TMDB korrekt als Quelle genannt wird. Für kommerzielle Nutzung ist eine separate Vereinbarung mit TMDB erforderlich.
-
-### Attribution und Branding
-
-Die WebUI enthält einen eigenen Bereich **Credits & Datenquellen** mit:
-
-- TVmaze-Nennung und Link
-- einem von TMDB freigegebenen Logo
-- einem Link zu `https://www.themoviedb.org`
-- dem vorgeschriebenen Hinweis: `This product uses the TMDB API but is not endorsed or certified by TMDB.`
-- einer separaten JustWatch-Attribution für Watch-Provider-Daten
-
-Das TMDB-Logo wird kleiner als die Kennzeichnung der Anwendung dargestellt und weder farblich noch im Seitenverhältnis verändert.
-
-### Cache-Aufbewahrung
-
-TMDB-Inhalte dürfen laut API Terms of Use nicht länger als sechs Monate gecacht werden. Persistierte TMDB-Serienzuordnungen werden deshalb spätestens nach **180 Tagen** erneut geprüft. Streaming-Verfügbarkeiten werden nur im Arbeitsspeicher gecacht und bei einem Container-Neustart verworfen.
+Für die TMDB-Nutzung enthält die WebUI die vorgeschriebene Attribution sowie die JustWatch-Attribution. Persistierte TMDB-Mappings werden spätestens nach 180 Tagen erneut geprüft.
 
 ## Konfiguration
 
-Für Unraid wird **keine `.env`-Datei verwendet**. Alle Einstellungen werden direkt als Container-Variablen im Unraid-Template gesetzt.
+Für Unraid wird **keine `.env`-Datei verwendet**. Alle Einstellungen werden direkt als Container-Variablen gesetzt.
 
-Benötigte Basisvariablen:
+Basisvariablen:
 
 - `SONARR_URL`
 - `SONARR_API_KEY`
@@ -103,14 +80,15 @@ Benötigte Basisvariablen:
 - `TZ` = `Europe/Berlin`
 - `DATABASE_PATH` = `/data/releases.sqlite3`
 - `READ_ONLY` = `true`
-- `PREFERRED_PROVIDER` = `tvmaze_de`
-- `TMDB_API_TOKEN`
+- `PREFERRED_PROVIDER` = `wikipedia_de` empfohlen
 
-Secrets und Zugangsdaten werden niemals im Repository hinterlegt.
+Optional:
+
+- `TMDB_API_TOKEN` – TMDB API Read Access Token
+
+TVmaze, Wikidata und Wikipedia benötigen keine zusätzlichen Variablen oder Zugangsdaten.
 
 ## Unraid
-
-Vorgesehene Werte:
 
 - Container Name: `sonarr-german-release`
 - Repository: `ghcr.io/2crazytv/sonarr-german-release:latest`
@@ -126,8 +104,9 @@ Sonarr → Settings → General → Security → API Key
 
 ## Nächste Schritte
 
-1. TVmaze-DE-Abdeckung mit realen Serien aus der Bibliothek prüfen
-2. Quellenkonflikte und Confidence weiter verfeinern
-3. zusätzliche kostenlose DE-Quellen evaluieren
-4. Hybrid-Modus für Freigabe der Sonarr-Suche
-5. erst danach optional schreibende Sonarr-Automation
+1. Abdeckung der Wikipedia-DE-Episodentabellen mit realen Serien prüfen
+2. Tabellenparser anhand problematischer Serien gezielt erweitern
+3. Quellenkonflikte und Confidence weiter verfeinern
+4. TMDB nur bei Bedarf optional aktivieren
+5. später Hybrid-Modus für Freigabe der Sonarr-Suche
+6. erst danach optional schreibende Sonarr-Automation
