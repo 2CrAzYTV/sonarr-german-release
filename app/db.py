@@ -69,6 +69,7 @@ def sync_series_mappings(series_list: list[dict]) -> dict:
                 ON CONFLICT(sonarr_series_id) DO UPDATE SET
                     series_title=excluded.series_title,
                     tvdb_id=excluded.tvdb_id,
+                    tmdb_id=excluded.tmdb_id,
                     imdb_id=excluded.imdb_id,
                     checked_at=CURRENT_TIMESTAMP
                 ''',
@@ -90,6 +91,79 @@ def mapping_stats():
             "SELECT COUNT(*) FROM provider_mappings WHERE imdb_id IS NOT NULL AND imdb_id != ''"
         ).fetchone()[0]
     return {"total": total, "imdb": imdb, "missing_imdb": max(total - imdb, 0)}
+
+
+def get_imdb_mapping(sonarr_series_id: int):
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT imdb_id FROM provider_mappings WHERE sonarr_series_id = ?",
+            (sonarr_series_id,),
+        ).fetchone()
+    return row["imdb_id"] if row and row["imdb_id"] else None
+
+
+def upsert_episode_release(
+    episode: dict,
+    provider: str,
+    release_date: str | None = None,
+    confidence: str | None = None,
+    note: str | None = None,
+):
+    series = episode.get("series") or {}
+    with _connect() as conn:
+        conn.execute(
+            '''
+            INSERT INTO episode_releases (
+                sonarr_episode_id, sonarr_series_id, series_title,
+                season_number, episode_number, episode_title,
+                provider, release_date, country, confidence, note, checked_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(sonarr_episode_id, provider) DO UPDATE SET
+                sonarr_series_id=excluded.sonarr_series_id,
+                series_title=excluded.series_title,
+                season_number=excluded.season_number,
+                episode_number=excluded.episode_number,
+                episode_title=excluded.episode_title,
+                release_date=excluded.release_date,
+                country=excluded.country,
+                confidence=excluded.confidence,
+                note=excluded.note,
+                checked_at=CURRENT_TIMESTAMP
+            ''',
+            (
+                episode.get("id"),
+                episode.get("seriesId"),
+                series.get("title") or "?",
+                episode.get("seasonNumber") or 0,
+                episode.get("episodeNumber") or 0,
+                episode.get("title"),
+                provider,
+                release_date,
+                settings.country,
+                confidence,
+                note,
+            ),
+        )
+
+
+def episode_release_map(episode_ids: list[int]):
+    if not episode_ids:
+        return {}
+    placeholders = ",".join("?" for _ in episode_ids)
+    query = f'''
+        SELECT sonarr_episode_id, provider, release_date, confidence, note
+        FROM episode_releases
+        WHERE sonarr_episode_id IN ({placeholders})
+    '''
+    result = {}
+    with _connect() as conn:
+        for row in conn.execute(query, episode_ids):
+            result.setdefault(row["sonarr_episode_id"], {})[row["provider"]] = {
+                "release_date": row["release_date"],
+                "confidence": row["confidence"],
+                "note": row["note"],
+            }
+    return result
 
 
 def db_stats():
