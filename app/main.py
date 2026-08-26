@@ -11,21 +11,19 @@ from .db import (
     db_stats,
     mapping_stats,
     sync_series_mappings,
-    get_imdb_mapping,
     get_tmdb_mapping,
     series_missing_tmdb_mapping,
     set_tmdb_mapping,
     upsert_episode_release,
     episode_release_map,
 )
-from .providers import ImdbProvider, TmdbProvider
+from .providers import TmdbProvider
 from .resolver import resolve_release
 from .sonarr import SonarrClient
 
-app = FastAPI(title="Sonarr German Release", version="0.2.8")
+app = FastAPI(title="Sonarr German Release", version="0.2.9")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
-imdb = ImdbProvider()
 tmdb = TmdbProvider()
 
 
@@ -57,16 +55,13 @@ def startup():
 
 @app.get("/health")
 async def health():
-    imdb_status = imdb.status()
     tmdb_status = tmdb.status()
     return {
         "status": "ok",
-        "version": "0.2.8",
+        "version": "0.2.9",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
-        "imdb_api_configured": imdb_status.configured,
-        "imdb_missing_settings": settings.imdb_missing_settings,
         "tmdb_api_configured": tmdb_status.configured,
     }
 
@@ -129,7 +124,7 @@ async def enrich_streaming_de(episodes: list[dict]) -> dict:
             season_results[key] = {
                 "available": False,
                 "providers": [],
-                "source": "JustWatch via TMDb",
+                "source": "JustWatch via TMDB",
                 "error": str(exc),
             }
 
@@ -146,7 +141,6 @@ async def dashboard(request: Request):
     status = None
     series = []
     episodes = []
-    mapping_sync = {"mapped": 0, "missing_imdb": 0}
     tmdb_sync = {"checked": 0, "mapped": 0, "errors": 0}
     streaming_sync = {"checked": 0, "available": 0, "errors": 0}
     release_data = {}
@@ -155,7 +149,7 @@ async def dashboard(request: Request):
     try:
         status = await sonarr.system_status()
         series = await sonarr.series()
-        mapping_sync = sync_series_mappings(series)
+        sync_series_mappings(series)
         tmdb_sync = await sync_tmdb_mappings()
 
         now = datetime.now(timezone.utc)
@@ -175,7 +169,6 @@ async def dashboard(request: Request):
                 confidence="low",
                 note="Sonarr/TVDB fallback",
             )
-            episode["imdbSeriesId"] = get_imdb_mapping(episode.get("seriesId"))
             episode["tmdbSeriesId"] = get_tmdb_mapping(episode.get("seriesId"))
 
         streaming_sync = await enrich_streaming_de(episodes)
@@ -201,10 +194,8 @@ async def dashboard(request: Request):
             "resolved": resolved,
             "db": db_stats(),
             "mapping": mapping_stats(),
-            "mapping_sync": mapping_sync,
             "tmdb_sync": tmdb_sync,
             "streaming_sync": streaming_sync,
-            "imdb": imdb.status(),
             "tmdb": tmdb.status(),
             "settings": settings,
         },
