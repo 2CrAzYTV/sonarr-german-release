@@ -4,12 +4,14 @@ Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichung
 
 ## Aktueller Stand
 
-Version 0.2.9 ist absichtlich **read-only**:
+Version 0.3.0 ist absichtlich **read-only**:
 
 - Verbindung zu Sonarr über API v3
 - Serien aus Sonarr einlesen
 - kommende Episoden aus Sonarr einlesen
-- TMDB-Mappings über vorhandene externe IDs ergänzen
+- TVmaze-Mapping über vorhandene IMDb-/TVDB-IDs
+- echte deutsche Country-Premiere-Daten aus TVmaze Alternate Lists
+- TMDB-Mappings über vorhandene externe IDs
 - DE-Streaming-Verfügbarkeit über TMDB Watch Providers / JustWatch
 - SQLite-Datenbank für mehrere Quellen
 - WebUI intern auf Port 8788
@@ -26,11 +28,28 @@ Das Projekt verlässt sich nicht auf eine einzelne Metadatenquelle.
 Priorität:
 
 1. `manual_de` – manuell bestätigte deutsche Daten
-2. `streaming_de` – Deutschland-spezifische Streaming-Verfügbarkeit
-3. `tmdb_de` – TMDB Mapping/Fallback bzw. zusätzliche Bestätigung
-4. `sonarr_tvdb` – letzter Fallback
+2. `tvmaze_de` – explizite deutsche Country-Premiere-Alternate-Lists
+3. `streaming_de` – Deutschland-spezifische Streaming-Verfügbarkeit
+4. `tmdb_de` – TMDB Mapping/Fallback bzw. zusätzliche Bestätigung
+5. `sonarr_tvdb` – letzter Fallback
 
 Jede Quelle wird separat behandelt. Bei unterschiedlichen Datumsangaben wird ein Konflikt angezeigt, statt still eine Quelle zu überschreiben.
+
+## TVmaze
+
+TVmaze wird über die kostenlose öffentliche REST-API verwendet. Es ist kein API-Key erforderlich.
+
+Die Anwendung nutzt TVmaze nur dann als deutsches Release-Datum, wenn TVmaze für die Serie eine Alternate List mit dem Land `DE` bereitstellt. Normale TVmaze-Episodendaten bzw. Weltpremieren werden nicht automatisch als deutsches Datum interpretiert.
+
+Verwendete Funktionen:
+
+- exaktes Serien-Mapping über vorhandene IMDb- oder TVDB-ID
+- Country-Premiere Alternate Lists für Deutschland
+- Zuordnung der Alternate Episodes zur ursprünglichen Staffel-/Episodennummer
+- Confidence `high`, wenn TVmaze eine Uhrzeit liefert
+- Confidence `medium`, wenn nur das Datum bekannt ist
+
+Es sind keine zusätzlichen Unraid-Variablen erforderlich.
 
 ## TMDB API
 
@@ -59,6 +78,7 @@ Die TMDB Developer API ist für **nicht-kommerzielle Nutzung kostenlos**, sofern
 
 Die WebUI enthält einen eigenen Bereich **Credits & Datenquellen** mit:
 
+- TVmaze-Nennung und Link
 - einem von TMDB freigegebenen Logo
 - einem Link zu `https://www.themoviedb.org`
 - dem vorgeschriebenen Hinweis: `This product uses the TMDB API but is not endorsed or certified by TMDB.`
@@ -83,7 +103,7 @@ Benötigte Basisvariablen:
 - `TZ` = `Europe/Berlin`
 - `DATABASE_PATH` = `/data/releases.sqlite3`
 - `READ_ONLY` = `true`
-- `PREFERRED_PROVIDER` = `tmdb_de`
+- `PREFERRED_PROVIDER` = `tvmaze_de`
 - `TMDB_API_TOKEN`
 
 Secrets und Zugangsdaten werden niemals im Repository hinterlegt.
@@ -106,8 +126,8 @@ Sonarr → Settings → General → Security → API Key
 
 ## Nächste Schritte
 
-1. TMDB-Mapping und DE-Streaming-Abdeckung weiter verbessern
-2. eine kostenlose, keylose DE-spezifische Episodenquelle ergänzen
-3. Quellenkonflikte und Confidence weiter verfeinern
+1. TVmaze-DE-Abdeckung mit realen Serien aus der Bibliothek prüfen
+2. Quellenkonflikte und Confidence weiter verfeinern
+3. zusätzliche kostenlose DE-Quellen evaluieren
 4. Hybrid-Modus für Freigabe der Sonarr-Suche
 5. erst danach optional schreibende Sonarr-Automation
