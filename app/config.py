@@ -11,12 +11,15 @@ class Settings(BaseSettings):
     read_only: bool = True
     preferred_provider: str = "imdb_de"
 
-    # Optional official IMDb API via AWS Data Exchange.
-    imdb_api_endpoint: str | None = None
+    # Official IMDb API via AWS Data Exchange.
     imdb_aws_region: str = "us-east-1"
     imdb_aws_access_key_id: str | None = None
     imdb_aws_secret_access_key: str | None = None
     imdb_aws_session_token: str | None = None
+    imdb_data_set_id: str | None = None
+    imdb_revision_id: str | None = None
+    imdb_asset_id: str | None = None
+    imdb_api_key: str | None = None
 
     # Optional TMDb API Read Access Token. Used for mapping/fallback checks only.
     tmdb_api_token: str | None = None
@@ -25,12 +28,20 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     @property
+    def imdb_missing_settings(self) -> list[str]:
+        required = {
+            "IMDB_AWS_ACCESS_KEY_ID": self.imdb_aws_access_key_id,
+            "IMDB_AWS_SECRET_ACCESS_KEY": self.imdb_aws_secret_access_key,
+            "IMDB_DATA_SET_ID": self.imdb_data_set_id,
+            "IMDB_REVISION_ID": self.imdb_revision_id,
+            "IMDB_ASSET_ID": self.imdb_asset_id,
+            "IMDB_API_KEY": self.imdb_api_key,
+        }
+        return [name for name, value in required.items() if not value]
+
+    @property
     def imdb_api_configured(self) -> bool:
-        return bool(
-            self.imdb_api_endpoint
-            and self.imdb_aws_access_key_id
-            and self.imdb_aws_secret_access_key
-        )
+        return not self.imdb_missing_settings
 
     @property
     def tmdb_api_configured(self) -> bool:
