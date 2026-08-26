@@ -4,11 +4,12 @@ Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichung
 
 ## Aktueller Stand
 
-Version 0.2 ist absichtlich **read-only**:
+Version 0.2.1 ist absichtlich **read-only**:
 
 - Verbindung zu Sonarr über API v3
 - Serien aus Sonarr einlesen
 - kommende Episoden aus Sonarr einlesen
+- Sonarr-IMDb-IDs automatisch übernehmen
 - SQLite-Datenbank vorbereiten
 - WebUI intern auf Port 8788
 - Unraid Host-Port 8789
@@ -28,6 +29,22 @@ Priorität:
 4. `Sonarr/TVDB` – letzter Fallback
 
 Jede Quelle wird separat gespeichert. Bei unterschiedlichen Datumsangaben wird ein Konflikt angezeigt, statt still eine Quelle zu überschreiben.
+
+## IMDb API
+
+Für IMDb wird bewusst **kein Webseiten-Scraping** verwendet. Vorgesehen ist die offizielle IMDb GraphQL API über AWS Data Exchange.
+
+Der Provider ist optional: Ohne IMDb-Zugang startet der Container normal weiter und zeigt den Provider als vorbereitet, aber nicht aktiv an.
+
+Optionale Unraid-Container-Variablen für IMDb:
+
+- `IMDB_API_ENDPOINT`
+- `IMDB_AWS_REGION` = `us-east-1`
+- `IMDB_AWS_ACCESS_KEY_ID`
+- `IMDB_AWS_SECRET_ACCESS_KEY`
+- `IMDB_AWS_SESSION_TOKEN` – nur falls benötigt
+
+Diese Zugangsdaten gehören ausschließlich in die Unraid-Container-Konfiguration und niemals ins Repository.
 
 ## Konfiguration
 
@@ -63,9 +80,10 @@ Sonarr → Settings → General → Security → API Key
 
 ## Nächste Schritte
 
-1. robuste IMDb-DE-Abfrage implementieren
-2. Serien-/Episoden-Zuordnung über IMDb/TVDB/TMDb-IDs
-3. Quellenkonflikte in der WebUI anzeigen
-4. optional Streaming-DE-Provider ergänzen
-5. Hybrid-Modus für Freigabe der Sonarr-Suche
-6. erst danach optional schreibende Sonarr-Automation
+1. offiziellen IMDb-GraphQL-Request signieren und testen
+2. Episoden einer Sonarr-Serie auf IMDb-Episoden abbilden
+3. deutsche Release-Daten pro Episode speichern
+4. Quellenkonflikte in der WebUI anzeigen
+5. optional Streaming-DE-Provider ergänzen
+6. Hybrid-Modus für Freigabe der Sonarr-Suche
+7. erst danach optional schreibende Sonarr-Automation
