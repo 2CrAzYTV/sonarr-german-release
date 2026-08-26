@@ -20,7 +20,7 @@ from .providers import ImdbProvider, TmdbProvider
 from .resolver import resolve_release
 from .sonarr import SonarrClient
 
-app = FastAPI(title="Sonarr German Release", version="0.2.4")
+app = FastAPI(title="Sonarr German Release", version="0.2.5")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 imdb = ImdbProvider()
@@ -38,7 +38,7 @@ async def health():
     tmdb_status = tmdb.status()
     return {
         "status": "ok",
-        "version": "0.2.4",
+        "version": "0.2.5",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
@@ -55,7 +55,9 @@ async def sync_tmdb_mappings() -> dict:
     mapped = 0
     errors = 0
 
-    for item in series_missing_tmdb_mapping(limit=10):
+    # A normal Sonarr library is small enough to resolve all currently
+    # missing mappings in one pass. Already mapped entries are skipped.
+    for item in series_missing_tmdb_mapping(limit=500):
         checked += 1
         try:
             tmdb_id = await tmdb.find_series_id(
