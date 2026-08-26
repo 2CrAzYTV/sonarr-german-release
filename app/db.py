@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS provider_mappings (
     tvdb_id INTEGER,
     tmdb_id INTEGER,
     imdb_id TEXT,
-    checked_at TEXT DEFAULT CURRENT_TIMESTAMP
+    checked_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    tmdb_checked_at TEXT
 );
 '''
 
@@ -46,6 +47,8 @@ def init_db():
         columns = {row[1] for row in conn.execute("PRAGMA table_info(provider_mappings)")}
         if "series_title" not in columns:
             conn.execute("ALTER TABLE provider_mappings ADD COLUMN series_title TEXT")
+        if "tmdb_checked_at" not in columns:
+            conn.execute("ALTER TABLE provider_mappings ADD COLUMN tmdb_checked_at TEXT")
 
 
 def sync_series_mappings(series_list: list[dict]) -> dict:
@@ -126,7 +129,11 @@ def series_missing_tmdb_mapping(limit: int = 10):
             '''
             SELECT sonarr_series_id, series_title, tvdb_id, imdb_id
             FROM provider_mappings
-            WHERE tmdb_id IS NULL
+            WHERE (
+                    tmdb_id IS NULL
+                    OR tmdb_checked_at IS NULL
+                    OR tmdb_checked_at < datetime('now', '-180 days')
+                  )
               AND ((imdb_id IS NOT NULL AND imdb_id != '') OR tvdb_id IS NOT NULL)
             ORDER BY sonarr_series_id
             LIMIT ?
@@ -141,7 +148,7 @@ def set_tmdb_mapping(sonarr_series_id: int, tmdb_id: int):
         conn.execute(
             '''
             UPDATE provider_mappings
-            SET tmdb_id = ?, checked_at = CURRENT_TIMESTAMP
+            SET tmdb_id = ?, tmdb_checked_at = CURRENT_TIMESTAMP
             WHERE sonarr_series_id = ?
             ''',
             (tmdb_id, sonarr_series_id),
