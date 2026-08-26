@@ -21,7 +21,7 @@ from .providers import TmdbProvider, TvmazeProvider, WikimediaProvider
 from .resolver import resolve_release
 from .sonarr import SonarrClient
 
-app = FastAPI(title="Sonarr German Release", version="0.3.1")
+app = FastAPI(title="Sonarr German Release", version="0.3.2")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 tmdb = TmdbProvider()
@@ -62,7 +62,7 @@ async def health():
     wikipedia_status = wikipedia.status()
     return {
         "status": "ok",
-        "version": "0.3.1",
+        "version": "0.3.2",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
@@ -97,7 +97,6 @@ async def sync_tmdb_mappings() -> dict:
 
 
 async def enrich_streaming_de(episodes: list[dict]) -> dict:
-    """Attach DE streaming availability to episodes on a season basis."""
     if not settings.tmdb_api_configured:
         return {"checked": 0, "available": 0, "errors": 0}
 
@@ -142,11 +141,14 @@ async def enrich_streaming_de(episodes: list[dict]) -> dict:
 
 
 async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
-    """Store only explicit German first-air dates found in de.wikipedia tables."""
     checked = 0
     wikidata_mapped = 0
     dewiki_pages = 0
     pages_checked = 0
+    tables_seen = 0
+    de_tables = 0
+    dated_rows = 0
+    matched_rows = 0
     release_dates = 0
     errors = 0
 
@@ -172,6 +174,10 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
             mapping = payload.get("mapping") or {}
             dates = payload.get("dates") or {}
             pages_checked += payload.get("pages_checked") or 0
+            tables_seen += payload.get("tables_seen") or 0
+            de_tables += payload.get("de_tables") or 0
+            dated_rows += payload.get("dated_rows") or 0
+            matched_rows += payload.get("matched_rows") or 0
 
             if mapping.get("qid"):
                 wikidata_mapped += 1
@@ -205,13 +211,16 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
         "wikidata_mapped": wikidata_mapped,
         "dewiki_pages": dewiki_pages,
         "pages_checked": pages_checked,
+        "tables_seen": tables_seen,
+        "de_tables": de_tables,
+        "dated_rows": dated_rows,
+        "matched_rows": matched_rows,
         "release_dates": release_dates,
         "errors": errors,
     }
 
 
 async def enrich_tvmaze_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
-    """Store only explicit German TVmaze alternate-list release dates."""
     checked = 0
     mapped = 0
     de_lists = 0
@@ -287,6 +296,10 @@ async def dashboard(request: Request):
         "wikidata_mapped": 0,
         "dewiki_pages": 0,
         "pages_checked": 0,
+        "tables_seen": 0,
+        "de_tables": 0,
+        "dated_rows": 0,
+        "matched_rows": 0,
         "release_dates": 0,
         "errors": 0,
     }
