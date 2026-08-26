@@ -69,7 +69,7 @@ def sync_series_mappings(series_list: list[dict]) -> dict:
                 ON CONFLICT(sonarr_series_id) DO UPDATE SET
                     series_title=excluded.series_title,
                     tvdb_id=excluded.tvdb_id,
-                    tmdb_id=excluded.tmdb_id,
+                    tmdb_id=COALESCE(provider_mappings.tmdb_id, excluded.tmdb_id),
                     imdb_id=excluded.imdb_id,
                     checked_at=CURRENT_TIMESTAMP
                 ''',
@@ -90,7 +90,16 @@ def mapping_stats():
         imdb = conn.execute(
             "SELECT COUNT(*) FROM provider_mappings WHERE imdb_id IS NOT NULL AND imdb_id != ''"
         ).fetchone()[0]
-    return {"total": total, "imdb": imdb, "missing_imdb": max(total - imdb, 0)}
+        tmdb = conn.execute(
+            "SELECT COUNT(*) FROM provider_mappings WHERE tmdb_id IS NOT NULL"
+        ).fetchone()[0]
+    return {
+        "total": total,
+        "imdb": imdb,
+        "tmdb": tmdb,
+        "missing_imdb": max(total - imdb, 0),
+        "missing_tmdb": max(total - tmdb, 0),
+    }
 
 
 def get_imdb_mapping(sonarr_series_id: int):
@@ -100,6 +109,43 @@ def get_imdb_mapping(sonarr_series_id: int):
             (sonarr_series_id,),
         ).fetchone()
     return row["imdb_id"] if row and row["imdb_id"] else None
+
+
+def get_tmdb_mapping(sonarr_series_id: int):
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT tmdb_id FROM provider_mappings WHERE sonarr_series_id = ?",
+            (sonarr_series_id,),
+        ).fetchone()
+    return row["tmdb_id"] if row and row["tmdb_id"] else None
+
+
+def series_missing_tmdb_mapping(limit: int = 10):
+    with _connect() as conn:
+        rows = conn.execute(
+            '''
+            SELECT sonarr_series_id, series_title, tvdb_id, imdb_id
+            FROM provider_mappings
+            WHERE tmdb_id IS NULL
+              AND ((imdb_id IS NOT NULL AND imdb_id != '') OR tvdb_id IS NOT NULL)
+            ORDER BY sonarr_series_id
+            LIMIT ?
+            ''',
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def set_tmdb_mapping(sonarr_series_id: int, tmdb_id: int):
+    with _connect() as conn:
+        conn.execute(
+            '''
+            UPDATE provider_mappings
+            SET tmdb_id = ?, checked_at = CURRENT_TIMESTAMP
+            WHERE sonarr_series_id = ?
+            ''',
+            (tmdb_id, sonarr_series_id),
+        )
 
 
 def upsert_episode_release(
