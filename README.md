@@ -4,7 +4,7 @@ Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichung
 
 ## Aktueller Stand
 
-Version 0.2.4 ist absichtlich **read-only**:
+Version 0.2.8 ist absichtlich **read-only**:
 
 - Verbindung zu Sonarr über API v3
 - Serien aus Sonarr einlesen
@@ -17,6 +17,7 @@ Version 0.2.4 ist absichtlich **read-only**:
 - keine Änderungen an Sonarr
 - keine Episode wird automatisch auf monitored/unmonitored gesetzt
 - Mehrquellen-Architektur mit Konflikterkennung
+- offizieller IMDb-AWS-Data-Exchange-Client vorbereitet
 
 ## Quellen-Priorität
 
@@ -26,7 +27,7 @@ Priorität:
 
 1. `manual_de` – manuell bestätigte deutsche Daten
 2. `imdb_de` – bevorzugte externe Quelle für deutsche Veröffentlichungstermine
-3. `streaming_de` – später für Netflix, Disney+, Prime Video usw.
+3. `streaming_de` – Streaming-Verfügbarkeit in Deutschland
 4. `tmdb_de` – Mapping/Fallback bzw. zusätzliche Bestätigung
 5. `sonarr_tvdb` – letzter Fallback
 
@@ -34,17 +35,24 @@ Jede Quelle wird separat gespeichert. Bei unterschiedlichen Datumsangaben wird e
 
 ## IMDb API
 
-Für IMDb wird bewusst **kein Webseiten-Scraping** verwendet. Vorgesehen ist die offizielle IMDb GraphQL API über AWS Data Exchange.
+Für IMDb wird bewusst **kein Webseiten-Scraping** verwendet. Verwendet wird die offizielle IMDb GraphQL API über AWS Data Exchange.
 
-Der Provider ist optional: Ohne IMDb-Zugang startet der Container normal weiter und zeigt den Provider als nicht konfiguriert an.
+Der Provider ist optional: Ohne vollständigen IMDb-Zugang startet der Container normal weiter und zeigt in der WebUI exakt an, welche Variablen noch fehlen.
 
-Optionale Unraid-Container-Variablen für IMDb:
+Unraid-Container-Variablen für IMDb:
 
-- `IMDB_API_ENDPOINT`
 - `IMDB_AWS_REGION` = `us-east-1`
 - `IMDB_AWS_ACCESS_KEY_ID`
 - `IMDB_AWS_SECRET_ACCESS_KEY`
-- `IMDB_AWS_SESSION_TOKEN` – nur falls benötigt
+- `IMDB_AWS_SESSION_TOKEN` – nur bei temporären AWS-Credentials
+- `IMDB_DATA_SET_ID`
+- `IMDB_REVISION_ID`
+- `IMDB_ASSET_ID`
+- `IMDB_API_KEY`
+
+`IMDB_API_ENDPOINT` wird nicht benötigt. Der Zugriff erfolgt über den offiziellen AWS-Data-Exchange-Client (`boto3`), der die AWS-SigV4-Signatur übernimmt.
+
+Die Data Set ID, Revision ID und Asset ID stammen aus dem abonnierten IMDb-Produkt in AWS Data Exchange. Der IMDb API Key wird von IMDb für die jeweilige Subscription bereitgestellt.
 
 Diese Zugangsdaten gehören ausschließlich in die Unraid-Container-Konfiguration und niemals ins Repository.
 
@@ -58,6 +66,7 @@ TMDb wird aktuell verwendet für:
 
 - Zuordnung IMDb/TVDB → TMDb-Serie
 - zusätzliche Serien-/Episoden-Metadaten
+- DE-Streaming-Verfügbarkeit über Watch Providers / JustWatch
 - spätere Bestätigung anderer Quellen
 
 Optionale Unraid-Container-Variable:
@@ -70,7 +79,7 @@ Ohne Token läuft der Container normal weiter; der TMDb-Provider bleibt deaktivi
 
 Für Unraid wird **keine `.env`-Datei verwendet**. Alle Einstellungen werden direkt als Container-Variablen im Unraid-Template gesetzt.
 
-Benötigte Variablen:
+Benötigte Basisvariablen:
 
 - `SONARR_URL`
 - `SONARR_API_KEY`
@@ -101,10 +110,10 @@ Sonarr → Settings → General → Security → API Key
 
 ## Nächste Schritte
 
-1. TMDb-Token optional in Unraid hinterlegen und Mapping prüfen
-2. offiziellen IMDb-GraphQL-Request signieren und testen
-3. Episoden einer Sonarr-Serie auf IMDb-Episoden abbilden
-4. deutsche Release-Daten pro Episode speichern
-5. Streaming-DE-Provider ergänzen
+1. IMDb-Subscription und AWS-Zugangsdaten vollständig in Unraid hinterlegen
+2. offiziellen IMDb-API-Zugriff testen
+3. IMDb-Episoden-IDs pro Serie laden und Sonarr-Episoden zuordnen
+4. deutsches IMDb-Release-Datum pro Episode aus dem abonnierten Schema lesen
+5. Konflikte mit Sonarr/TVDB und weiteren Quellen anzeigen
 6. Hybrid-Modus für Freigabe der Sonarr-Suche
 7. erst danach optional schreibende Sonarr-Automation
