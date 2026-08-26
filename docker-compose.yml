@@ -1,0 +1,17 @@
+services:
+  sonarr-german-release:
+    build: .
+    container_name: sonarr-german-release
+    ports:
+      - "8789:8788"
+    environment:
+      SONARR_URL: "${SONARR_URL}"
+      SONARR_API_KEY: "${SONARR_API_KEY}"
+      COUNTRY: "${COUNTRY:-DE}"
+      LANGUAGE: "${LANGUAGE:-de-DE}"
+      TZ: "${TZ:-Europe/Berlin}"
+      DATABASE_PATH: "/data/releases.sqlite3"
+      READ_ONLY: "${READ_ONLY:-true}"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
