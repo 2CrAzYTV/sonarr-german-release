@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     imdb_aws_secret_access_key: str | None = None
     imdb_aws_session_token: str | None = None
 
+    # Optional TMDb API Read Access Token. Used for mapping/fallback checks only.
+    tmdb_api_token: str | None = None
+    tmdb_base_url: str = "https://api.themoviedb.org/3"
+
     model_config = SettingsConfigDict(extra="ignore")
 
     @property
@@ -27,6 +31,10 @@ class Settings(BaseSettings):
             and self.imdb_aws_access_key_id
             and self.imdb_aws_secret_access_key
         )
+
+    @property
+    def tmdb_api_configured(self) -> bool:
+        return bool(self.tmdb_api_token)
 
 
 settings = Settings()
