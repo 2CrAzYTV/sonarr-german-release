@@ -13,9 +13,9 @@ class ProviderStatus:
 
 
 class TmdbProvider:
-    """TMDb mapping/fallback provider.
+    """TMDB mapping/fallback provider.
 
-    TMDb does not expose a Germany-specific release-date endpoint for TV
+    TMDB does not expose a Germany-specific release-date endpoint for TV
     episodes. Therefore this provider must not label the generic episode
     air_date as a German release date.
 
@@ -44,18 +44,18 @@ class TmdbProvider:
                 name=self.name,
                 configured=True,
                 active=True,
-                note="TMDb API konfiguriert · Mapping + DE-Streaming aktiv",
+                note="TMDB API konfiguriert · Mapping + DE-Streaming aktiv",
             )
         return ProviderStatus(
             name=self.name,
             configured=False,
             active=False,
-            note="TMDb API Read Access Token fehlt",
+            note="TMDB API Read Access Token fehlt",
         )
 
     async def _get(self, path: str, params: dict | None = None):
         if not settings.tmdb_api_configured:
-            raise RuntimeError("TMDb API ist nicht konfiguriert")
+            raise RuntimeError("TMDB API ist nicht konfiguriert")
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(
                 f"{settings.tmdb_base_url.rstrip('/')}/{path.lstrip('/')}",
@@ -70,7 +70,7 @@ class TmdbProvider:
         imdb_id: str | None = None,
         tvdb_id: int | None = None,
     ) -> int | None:
-        """Resolve a TMDb TV series id from an external identifier."""
+        """Resolve a TMDB TV series id from an external identifier."""
         if imdb_id:
             data = await self._get(
                 f"find/{imdb_id}",
@@ -145,7 +145,7 @@ class TmdbProvider:
             "providers": provider_names,
             "groups": provider_groups,
             "link": region.get("link"),
-            "source": "JustWatch via TMDb",
+            "source": "JustWatch via TMDB",
             "country": country.upper(),
         }
         self._watch_cache[cache_key] = result
