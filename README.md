@@ -1,23 +1,23 @@
 # Sonarr German Release
 
-Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichungsdaten.
+Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichungs- und Streaming-Informationen.
 
 ## Aktueller Stand
 
-Version 0.2.8 ist absichtlich **read-only**:
+Version 0.2.9 ist absichtlich **read-only**:
 
 - Verbindung zu Sonarr über API v3
 - Serien aus Sonarr einlesen
 - kommende Episoden aus Sonarr einlesen
-- Sonarr-IMDb-IDs automatisch übernehmen
-- TMDb-Mappings optional über externe IDs ergänzen
+- TMDB-Mappings über vorhandene externe IDs ergänzen
+- DE-Streaming-Verfügbarkeit über TMDB Watch Providers / JustWatch
 - SQLite-Datenbank für mehrere Quellen
 - WebUI intern auf Port 8788
 - Unraid Host-Port 8789
 - keine Änderungen an Sonarr
 - keine Episode wird automatisch auf monitored/unmonitored gesetzt
 - Mehrquellen-Architektur mit Konflikterkennung
-- offizieller IMDb-AWS-Data-Exchange-Client vorbereitet
+- keine kostenpflichtige IMDb-/AWS-Integration
 
 ## Quellen-Priorität
 
@@ -26,54 +26,49 @@ Das Projekt verlässt sich nicht auf eine einzelne Metadatenquelle.
 Priorität:
 
 1. `manual_de` – manuell bestätigte deutsche Daten
-2. `imdb_de` – bevorzugte externe Quelle für deutsche Veröffentlichungstermine
-3. `streaming_de` – Streaming-Verfügbarkeit in Deutschland
-4. `tmdb_de` – Mapping/Fallback bzw. zusätzliche Bestätigung
-5. `sonarr_tvdb` – letzter Fallback
+2. `streaming_de` – Deutschland-spezifische Streaming-Verfügbarkeit
+3. `tmdb_de` – TMDB Mapping/Fallback bzw. zusätzliche Bestätigung
+4. `sonarr_tvdb` – letzter Fallback
 
-Jede Quelle wird separat gespeichert. Bei unterschiedlichen Datumsangaben wird ein Konflikt angezeigt, statt still eine Quelle zu überschreiben.
+Jede Quelle wird separat behandelt. Bei unterschiedlichen Datumsangaben wird ein Konflikt angezeigt, statt still eine Quelle zu überschreiben.
 
-## IMDb API
+## TMDB API
 
-Für IMDb wird bewusst **kein Webseiten-Scraping** verwendet. Verwendet wird die offizielle IMDb GraphQL API über AWS Data Exchange.
+TMDB wird bewusst **nicht als alleinige Quelle für deutsche Episoden-Releasedaten** verwendet.
 
-Der Provider ist optional: Ohne vollständigen IMDb-Zugang startet der Container normal weiter und zeigt in der WebUI exakt an, welche Variablen noch fehlen.
+Wichtig: TMDB bietet für TV-Episoden keinen eigenen Deutschland-Release-Date-Endpunkt wie bei Filmen. Das normale Episodenfeld `air_date` wird deshalb **nicht** als deutsches Veröffentlichungsdatum gespeichert.
 
-Unraid-Container-Variablen für IMDb:
+TMDB wird aktuell verwendet für:
 
-- `IMDB_AWS_REGION` = `us-east-1`
-- `IMDB_AWS_ACCESS_KEY_ID`
-- `IMDB_AWS_SECRET_ACCESS_KEY`
-- `IMDB_AWS_SESSION_TOKEN` – nur bei temporären AWS-Credentials
-- `IMDB_DATA_SET_ID`
-- `IMDB_REVISION_ID`
-- `IMDB_ASSET_ID`
-- `IMDB_API_KEY`
-
-`IMDB_API_ENDPOINT` wird nicht benötigt. Der Zugriff erfolgt über den offiziellen AWS-Data-Exchange-Client (`boto3`), der die AWS-SigV4-Signatur übernimmt.
-
-Die Data Set ID, Revision ID und Asset ID stammen aus dem abonnierten IMDb-Produkt in AWS Data Exchange. Der IMDb API Key wird von IMDb für die jeweilige Subscription bereitgestellt.
-
-Diese Zugangsdaten gehören ausschließlich in die Unraid-Container-Konfiguration und niemals ins Repository.
-
-## TMDb API
-
-TMDb wird bewusst **nicht als alleinige Quelle für deutsche Episoden-Releasedaten** verwendet.
-
-Wichtig: TMDb bietet für TV-Episoden keinen eigenen Deutschland-Release-Date-Endpunkt wie bei Filmen. Das normale Episodenfeld `air_date` wird deshalb **nicht** als deutsches Veröffentlichungsdatum gespeichert.
-
-TMDb wird aktuell verwendet für:
-
-- Zuordnung IMDb/TVDB → TMDb-Serie
+- Zuordnung vorhandener externer Serien-IDs zu einer TMDB-Serie
 - zusätzliche Serien-/Episoden-Metadaten
 - DE-Streaming-Verfügbarkeit über Watch Providers / JustWatch
-- spätere Bestätigung anderer Quellen
+- spätere Bestätigung anderer kostenloser Quellen
 
-Optionale Unraid-Container-Variable:
+Unraid-Container-Variable:
 
-- `TMDB_API_TOKEN` – TMDb API Read Access Token
+- `TMDB_API_TOKEN` – TMDB API Read Access Token
 
-Ohne Token läuft der Container normal weiter; der TMDb-Provider bleibt deaktiviert.
+Ohne Token läuft der Container normal weiter; der TMDB-Provider bleibt deaktiviert.
+
+### Kosten
+
+Die TMDB Developer API ist für **nicht-kommerzielle Nutzung kostenlos**, sofern TMDB korrekt als Quelle genannt wird. Für kommerzielle Nutzung ist eine separate Vereinbarung mit TMDB erforderlich.
+
+### Attribution und Branding
+
+Die WebUI enthält einen eigenen Bereich **Credits & Datenquellen** mit:
+
+- einem von TMDB freigegebenen Logo
+- einem Link zu `https://www.themoviedb.org`
+- dem vorgeschriebenen Hinweis: `This product uses the TMDB API but is not endorsed or certified by TMDB.`
+- einer separaten JustWatch-Attribution für Watch-Provider-Daten
+
+Das TMDB-Logo wird kleiner als die Kennzeichnung der Anwendung dargestellt und weder farblich noch im Seitenverhältnis verändert.
+
+### Cache-Aufbewahrung
+
+TMDB-Inhalte dürfen laut API Terms of Use nicht länger als sechs Monate gecacht werden. Persistierte TMDB-Serienzuordnungen werden deshalb spätestens nach **180 Tagen** erneut geprüft. Streaming-Verfügbarkeiten werden nur im Arbeitsspeicher gecacht und bei einem Container-Neustart verworfen.
 
 ## Konfiguration
 
@@ -88,7 +83,8 @@ Benötigte Basisvariablen:
 - `TZ` = `Europe/Berlin`
 - `DATABASE_PATH` = `/data/releases.sqlite3`
 - `READ_ONLY` = `true`
-- `PREFERRED_PROVIDER` = `imdb_de`
+- `PREFERRED_PROVIDER` = `tmdb_de`
+- `TMDB_API_TOKEN`
 
 Secrets und Zugangsdaten werden niemals im Repository hinterlegt.
 
@@ -110,10 +106,8 @@ Sonarr → Settings → General → Security → API Key
 
 ## Nächste Schritte
 
-1. IMDb-Subscription und AWS-Zugangsdaten vollständig in Unraid hinterlegen
-2. offiziellen IMDb-API-Zugriff testen
-3. IMDb-Episoden-IDs pro Serie laden und Sonarr-Episoden zuordnen
-4. deutsches IMDb-Release-Datum pro Episode aus dem abonnierten Schema lesen
-5. Konflikte mit Sonarr/TVDB und weiteren Quellen anzeigen
-6. Hybrid-Modus für Freigabe der Sonarr-Suche
-7. erst danach optional schreibende Sonarr-Automation
+1. TMDB-Mapping und DE-Streaming-Abdeckung weiter verbessern
+2. eine kostenlose, keylose DE-spezifische Episodenquelle ergänzen
+3. Quellenkonflikte und Confidence weiter verfeinern
+4. Hybrid-Modus für Freigabe der Sonarr-Suche
+5. erst danach optional schreibende Sonarr-Automation
