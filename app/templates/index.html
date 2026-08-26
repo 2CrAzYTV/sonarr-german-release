@@ -6,19 +6,20 @@
   <title>Sonarr German Release</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; background:#111827; color:#e5e7eb; }
-    main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    main { max-width: 1300px; margin: 0 auto; padding: 24px; }
     .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
     .card { background:#1f2937; border:1px solid #374151; border-radius:12px; padding:16px; }
     table { width:100%; border-collapse:collapse; margin-top:16px; }
-    th,td { padding:10px; border-bottom:1px solid #374151; text-align:left; }
+    th,td { padding:10px; border-bottom:1px solid #374151; text-align:left; vertical-align:top; }
     th { color:#93c5fd; }
     .ok { color:#86efac; } .bad { color:#fca5a5; } .warn { color:#fcd34d; } .muted { color:#9ca3af; }
+    .tag { display:inline-block; padding:2px 7px; border:1px solid #4b5563; border-radius:999px; font-size:12px; margin-top:4px; }
   </style>
 </head>
 <body>
 <main>
   <h1>Sonarr German Release</h1>
-  <p class="muted">v0.2.1 · Nur-Lese-Modus · Deutschland · IMDb-DE-first</p>
+  <p class="muted">v0.2.3 · Nur-Lese-Modus · Deutschland · IMDb-DE-first</p>
 
   {% if error %}
     <div class="card bad"><strong>Sonarr-Verbindung fehlgeschlagen:</strong> {{ error }}</div>
@@ -31,6 +32,7 @@
     </div>
     <div class="card"><strong>Serien</strong><br>{{ series|length }}</div>
     <div class="card"><strong>IMDb-Mappings</strong><br>{{ mapping.imdb }} / {{ mapping.total }}</div>
+    <div class="card"><strong>Release-Beobachtungen</strong><br>{{ db.releases }} · {{ db.providers }} Quellen</div>
     <div class="card">
       <strong>IMDb DE Provider</strong><br>
       {% if imdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Vorbereitet</span>{% endif %}<br>
@@ -43,23 +45,51 @@
     {% if mapping.missing_imdb %}Bei {{ mapping.missing_imdb }} Serien fehlt sie noch.{% endif %}
   </p>
 
-  <h2>Kommende Episoden (Sonarr-Daten)</h2>
+  <h2>Kommende Episoden</h2>
   <table>
     <thead>
-      <tr><th>Serie</th><th>Episode</th><th>Titel</th><th>Sonarr-Datum</th><th>Deutschland</th><th>Quelle</th></tr>
+      <tr><th>Serie</th><th>Episode</th><th>Titel</th><th>Sonarr-Datum</th><th>Deutschland</th><th>Quelle</th><th>Status</th></tr>
     </thead>
     <tbody>
       {% for ep in episodes %}
+      {% set result = resolved.get(ep.id, {}) %}
       <tr>
-        <td>{{ ep.series.title if ep.series else "?" }}</td>
+        <td>
+          {{ ep.series.title if ep.series else "?" }}
+          {% if ep.imdbSeriesId %}<br><span class="muted">{{ ep.imdbSeriesId }}</span>{% endif %}
+        </td>
         <td>S{{ "%02d"|format(ep.seasonNumber) }}E{{ "%02d"|format(ep.episodeNumber) }}</td>
         <td>{{ ep.title or "-" }}</td>
         <td>{{ ep.airDateUtc or ep.airDate or "-" }}</td>
-        <td class="muted">noch nicht ermittelt</td>
-        <td class="muted">IMDb DE → Fallbacks</td>
+        <td>
+          {% if result.release_date %}
+            {{ result.release_date }}
+          {% else %}
+            <span class="muted">noch nicht ermittelt</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if result.provider %}
+            {{ result.provider }}
+            {% if result.confidence %}<br><span class="tag">{{ result.confidence }}</span>{% endif %}
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if result.conflict %}
+            <span class="warn">Quellenkonflikt</span>
+          {% elif result.provider == "sonarr_tvdb" %}
+            <span class="muted">Fallback</span>
+          {% elif result.provider %}
+            <span class="ok">aufgelöst</span>
+          {% else %}
+            <span class="muted">offen</span>
+          {% endif %}
+        </td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="muted">Keine Episoden geladen.</td></tr>
+      <tr><td colspan="7" class="muted">Keine Episoden geladen.</td></tr>
       {% endfor %}
     </tbody>
   </table>
