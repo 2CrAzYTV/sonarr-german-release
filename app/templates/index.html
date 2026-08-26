@@ -19,7 +19,7 @@
 <body>
 <main>
   <h1>Sonarr German Release</h1>
-  <p class="muted">v0.2.3 · Nur-Lese-Modus · Deutschland · IMDb-DE-first</p>
+  <p class="muted">v0.2.4 · Nur-Lese-Modus · Deutschland · IMDb-DE-first</p>
 
   {% if error %}
     <div class="card bad"><strong>Sonarr-Verbindung fehlgeschlagen:</strong> {{ error }}</div>
@@ -32,17 +32,25 @@
     </div>
     <div class="card"><strong>Serien</strong><br>{{ series|length }}</div>
     <div class="card"><strong>IMDb-Mappings</strong><br>{{ mapping.imdb }} / {{ mapping.total }}</div>
+    <div class="card"><strong>TMDb-Mappings</strong><br>{{ mapping.tmdb }} / {{ mapping.total }}</div>
     <div class="card"><strong>Release-Beobachtungen</strong><br>{{ db.releases }} · {{ db.providers }} Quellen</div>
     <div class="card">
       <strong>IMDb DE Provider</strong><br>
-      {% if imdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Vorbereitet</span>{% endif %}<br>
+      {% if imdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht konfiguriert</span>{% endif %}<br>
       <span class="muted">{{ imdb.note }}</span>
+    </div>
+    <div class="card">
+      <strong>TMDb DE Provider</strong><br>
+      {% if tmdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht konfiguriert</span>{% endif %}<br>
+      <span class="muted">{{ tmdb.note }}</span>
     </div>
   </div>
 
   <p class="muted">
     Sonarr liefert für {{ mapping.imdb }} Serien bereits eine IMDb-ID.
     {% if mapping.missing_imdb %}Bei {{ mapping.missing_imdb }} Serien fehlt sie noch.{% endif %}
+    TMDb-Mappings: {{ mapping.tmdb }} / {{ mapping.total }}.
+    {% if tmdb_sync.checked %}Letzter TMDb-Lauf: {{ tmdb_sync.mapped }} von {{ tmdb_sync.checked }} neu zugeordnet{% if tmdb_sync.errors %}, {{ tmdb_sync.errors }} Fehler{% endif %}.{% endif %}
   </p>
 
   <h2>Kommende Episoden</h2>
@@ -56,7 +64,8 @@
       <tr>
         <td>
           {{ ep.series.title if ep.series else "?" }}
-          {% if ep.imdbSeriesId %}<br><span class="muted">{{ ep.imdbSeriesId }}</span>{% endif %}
+          {% if ep.imdbSeriesId %}<br><span class="muted">IMDb: {{ ep.imdbSeriesId }}</span>{% endif %}
+          {% if ep.tmdbSeriesId %}<br><span class="muted">TMDb: {{ ep.tmdbSeriesId }}</span>{% endif %}
         </td>
         <td>S{{ "%02d"|format(ep.seasonNumber) }}E{{ "%02d"|format(ep.episodeNumber) }}</td>
         <td>{{ ep.title or "-" }}</td>
