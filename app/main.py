@@ -14,9 +14,10 @@ from .db import (
     episode_release_map,
 )
 from .providers import ImdbProvider
+from .resolver import resolve_release
 from .sonarr import SonarrClient
 
-app = FastAPI(title="Sonarr German Release", version="0.2.2")
+app = FastAPI(title="Sonarr German Release", version="0.2.3")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 imdb = ImdbProvider()
@@ -32,7 +33,7 @@ async def health():
     provider = imdb.status()
     return {
         "status": "ok",
-        "version": "0.2.2",
+        "version": "0.2.3",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
@@ -48,6 +49,7 @@ async def dashboard(request: Request):
     episodes = []
     mapping_sync = {"mapped": 0, "missing_imdb": 0}
     release_data = {}
+    resolved = {}
 
     try:
         status = await sonarr.system_status()
@@ -73,9 +75,12 @@ async def dashboard(request: Request):
             )
             episode["imdbSeriesId"] = get_imdb_mapping(episode.get("seriesId"))
 
-        release_data = episode_release_map(
-            [episode.get("id") for episode in episodes if episode.get("id")]
-        )
+        episode_ids = [episode.get("id") for episode in episodes if episode.get("id")]
+        release_data = episode_release_map(episode_ids)
+        resolved = {
+            episode_id: resolve_release(observations)
+            for episode_id, observations in release_data.items()
+        }
     except Exception as exc:
         error = str(exc)
 
@@ -88,6 +93,7 @@ async def dashboard(request: Request):
             "series": series,
             "episodes": episodes,
             "release_data": release_data,
+            "resolved": resolved,
             "db": db_stats(),
             "mapping": mapping_stats(),
             "mapping_sync": mapping_sync,
