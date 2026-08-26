@@ -4,25 +4,33 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from .config import settings
-from .db import init_db, db_stats
+from .db import init_db, db_stats, mapping_stats, sync_series_mappings
+from .providers import ImdbProvider
 from .sonarr import SonarrClient
 
-app = FastAPI(title="Sonarr German Release", version="0.1.1")
+app = FastAPI(title="Sonarr German Release", version="0.2.1")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
+imdb = ImdbProvider()
+
 
 @app.on_event("startup")
 def startup():
     init_db()
 
+
 @app.get("/health")
 async def health():
+    provider = imdb.status()
     return {
         "status": "ok",
-        "version": "0.1.1",
+        "version": "0.2.1",
         "read_only": settings.read_only,
         "country": settings.country,
+        "preferred_provider": settings.preferred_provider,
+        "imdb_api_configured": provider.configured,
     }
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -30,10 +38,12 @@ async def dashboard(request: Request):
     status = None
     series = []
     episodes = []
+    mapping_sync = {"mapped": 0, "missing_imdb": 0}
 
     try:
         status = await sonarr.system_status()
         series = await sonarr.series()
+        mapping_sync = sync_series_mappings(series)
 
         now = datetime.now(timezone.utc)
         end = now + timedelta(days=45)
@@ -54,6 +64,9 @@ async def dashboard(request: Request):
             "series": series,
             "episodes": episodes,
             "db": db_stats(),
+            "mapping": mapping_stats(),
+            "mapping_sync": mapping_sync,
+            "imdb": imdb.status(),
             "settings": settings,
         },
     )
