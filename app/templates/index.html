@@ -22,7 +22,7 @@
 <body>
 <main>
   <h1>Sonarr German Release</h1>
-  <p class="muted">v0.2.9 · Nur-Lese-Modus · Deutschland · TMDB + Sonarr</p>
+  <p class="muted">v0.3.0 · Nur-Lese-Modus · Deutschland · TVmaze DE + TMDB + Sonarr</p>
 
   {% if error %}
     <div class="card bad"><strong>Sonarr-Verbindung fehlgeschlagen:</strong> {{ error }}</div>
@@ -35,8 +35,15 @@
     </div>
     <div class="card"><strong>Serien</strong><br>{{ series|length }}</div>
     <div class="card"><strong>TMDB-Mappings</strong><br>{{ mapping.tmdb }} / {{ mapping.total }}</div>
+    <div class="card"><strong>TVmaze-Mappings</strong><br>{{ tvmaze_sync.mapped }} / {{ tvmaze_sync.checked }} kommende Serien</div>
+    <div class="card"><strong>TVmaze DE-Daten</strong><br>{{ tvmaze_sync.release_dates }} Episoden · {{ tvmaze_sync.de_lists }} Serien</div>
     <div class="card"><strong>DE-Streaming</strong><br>{{ streaming_sync.available }} / {{ streaming_sync.checked }} Staffeln</div>
     <div class="card"><strong>Release-Beobachtungen</strong><br>{{ db.releases }} · {{ db.providers }} Quellen</div>
+    <div class="card">
+      <strong>TVmaze DE Provider</strong><br>
+      {% if tvmaze.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht aktiv</span>{% endif %}<br>
+      <span class="muted">{{ tvmaze.note }}</span>
+    </div>
     <div class="card">
       <strong>TMDB Provider</strong><br>
       {% if tmdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht konfiguriert</span>{% endif %}<br>
@@ -45,6 +52,7 @@
   </div>
 
   <p class="muted">
+    TVmaze: {{ tvmaze_sync.mapped }} von {{ tvmaze_sync.checked }} kommenden Serien exakt über IMDb/TVDB zugeordnet; {{ tvmaze_sync.release_dates }} deutsche Episodentermine aus expliziten DE-Alternate-Lists{% if tvmaze_sync.errors %}, {{ tvmaze_sync.errors }} Fehler{% endif %}.
     TMDB-Mappings: {{ mapping.tmdb }} / {{ mapping.total }}.
     {% if tmdb_sync.checked %}Letzter TMDB-Lauf: {{ tmdb_sync.mapped }} von {{ tmdb_sync.checked }} zugeordnet oder aktualisiert{% if tmdb_sync.errors %}, {{ tmdb_sync.errors }} Fehler{% endif %}.{% endif %}
     {% if streaming_sync.checked %} DE-Streaming geprüft: {{ streaming_sync.available }} von {{ streaming_sync.checked }} Staffeln mit Verfügbarkeit{% if streaming_sync.errors %}, {{ streaming_sync.errors }} Fehler{% endif %}.{% endif %}
@@ -61,6 +69,7 @@
       <tr>
         <td>
           {{ ep.series.title if ep.series else "?" }}
+          {% if ep.tvmazeSeriesId %}<br><span class="muted">TVmaze: {{ ep.tvmazeSeriesId }}</span>{% endif %}
           {% if ep.tmdbSeriesId %}<br><span class="muted">TMDB: {{ ep.tmdbSeriesId }}</span>{% endif %}
         </td>
         <td>S{{ "%02d"|format(ep.seasonNumber) }}E{{ "%02d"|format(ep.episodeNumber) }}</td>
@@ -111,6 +120,7 @@
 
   <section class="card credits" aria-labelledby="credits-heading">
     <h2 id="credits-heading">Credits &amp; Datenquellen</h2>
+    <p><a href="https://www.tvmaze.com" target="_blank" rel="noopener noreferrer">TVmaze</a> wird über die kostenlose öffentliche API für exakte Serien-Mappings und explizite deutsche Country-Premiere-Alternate-Lists verwendet.</p>
     <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" aria-label="The Movie Database (TMDB)">
       <img class="tmdb-logo" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_1-5bdc75aaebeb75dc7ae79426ddd9be3b2be1e342510f8202baf6bffa71d7f5c4.svg" alt="TMDB">
     </a>
