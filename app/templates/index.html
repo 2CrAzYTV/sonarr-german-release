@@ -12,14 +12,17 @@
     table { width:100%; border-collapse:collapse; margin-top:16px; }
     th,td { padding:10px; border-bottom:1px solid #374151; text-align:left; vertical-align:top; }
     th { color:#93c5fd; }
+    a { color:#93c5fd; }
     .ok { color:#86efac; } .bad { color:#fca5a5; } .warn { color:#fcd34d; } .muted { color:#9ca3af; }
     .tag { display:inline-block; padding:2px 7px; border:1px solid #4b5563; border-radius:999px; font-size:12px; margin:2px 3px 2px 0; }
+    .credits { margin-top:28px; }
+    .tmdb-logo { width:72px; height:auto; display:block; margin:10px 0 12px; }
   </style>
 </head>
 <body>
 <main>
   <h1>Sonarr German Release</h1>
-  <p class="muted">v0.2.8 · Nur-Lese-Modus · Deutschland · IMDb-DE-first</p>
+  <p class="muted">v0.2.9 · Nur-Lese-Modus · Deutschland · TMDB + Sonarr</p>
 
   {% if error %}
     <div class="card bad"><strong>Sonarr-Verbindung fehlgeschlagen:</strong> {{ error }}</div>
@@ -31,27 +34,19 @@
       {% if status %}<span class="ok">Verbunden</span> · {{ status.version }}{% else %}<span class="bad">Nicht verbunden</span>{% endif %}
     </div>
     <div class="card"><strong>Serien</strong><br>{{ series|length }}</div>
-    <div class="card"><strong>IMDb-Mappings</strong><br>{{ mapping.imdb }} / {{ mapping.total }}</div>
-    <div class="card"><strong>TMDb-Mappings</strong><br>{{ mapping.tmdb }} / {{ mapping.total }}</div>
+    <div class="card"><strong>TMDB-Mappings</strong><br>{{ mapping.tmdb }} / {{ mapping.total }}</div>
     <div class="card"><strong>DE-Streaming</strong><br>{{ streaming_sync.available }} / {{ streaming_sync.checked }} Staffeln</div>
     <div class="card"><strong>Release-Beobachtungen</strong><br>{{ db.releases }} · {{ db.providers }} Quellen</div>
     <div class="card">
-      <strong>IMDb DE Provider</strong><br>
-      {% if imdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht konfiguriert</span>{% endif %}<br>
-      <span class="muted">{{ imdb.note }}</span>
-    </div>
-    <div class="card">
-      <strong>TMDb DE Provider</strong><br>
+      <strong>TMDB Provider</strong><br>
       {% if tmdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht konfiguriert</span>{% endif %}<br>
       <span class="muted">{{ tmdb.note }}</span>
     </div>
   </div>
 
   <p class="muted">
-    Sonarr liefert für {{ mapping.imdb }} Serien bereits eine IMDb-ID.
-    {% if mapping.missing_imdb %}Bei {{ mapping.missing_imdb }} Serien fehlt sie noch.{% endif %}
-    TMDb-Mappings: {{ mapping.tmdb }} / {{ mapping.total }}.
-    {% if tmdb_sync.checked %}Letzter TMDb-Lauf: {{ tmdb_sync.mapped }} von {{ tmdb_sync.checked }} neu zugeordnet{% if tmdb_sync.errors %}, {{ tmdb_sync.errors }} Fehler{% endif %}.{% endif %}
+    TMDB-Mappings: {{ mapping.tmdb }} / {{ mapping.total }}.
+    {% if tmdb_sync.checked %}Letzter TMDB-Lauf: {{ tmdb_sync.mapped }} von {{ tmdb_sync.checked }} zugeordnet oder aktualisiert{% if tmdb_sync.errors %}, {{ tmdb_sync.errors }} Fehler{% endif %}.{% endif %}
     {% if streaming_sync.checked %} DE-Streaming geprüft: {{ streaming_sync.available }} von {{ streaming_sync.checked }} Staffeln mit Verfügbarkeit{% if streaming_sync.errors %}, {{ streaming_sync.errors }} Fehler{% endif %}.{% endif %}
   </p>
 
@@ -66,8 +61,7 @@
       <tr>
         <td>
           {{ ep.series.title if ep.series else "?" }}
-          {% if ep.imdbSeriesId %}<br><span class="muted">IMDb: {{ ep.imdbSeriesId }}</span>{% endif %}
-          {% if ep.tmdbSeriesId %}<br><span class="muted">TMDb: {{ ep.tmdbSeriesId }}</span>{% endif %}
+          {% if ep.tmdbSeriesId %}<br><span class="muted">TMDB: {{ ep.tmdbSeriesId }}</span>{% endif %}
         </td>
         <td>S{{ "%02d"|format(ep.seasonNumber) }}E{{ "%02d"|format(ep.episodeNumber) }}</td>
         <td>{{ ep.title or "-" }}</td>
@@ -82,11 +76,11 @@
         <td>
           {% if ep.streamingDE and ep.streamingDE.available %}
             {% for provider in ep.streamingDE.providers %}<span class="tag">{{ provider }}</span>{% endfor %}
-            <br><span class="muted">JustWatch via TMDb · DE</span>
+            <br><span class="muted">JustWatch via TMDB · DE</span>
           {% elif ep.tmdbSeriesId %}
             <span class="muted">keine DE-Verfügbarkeit gemeldet</span>
           {% else %}
-            <span class="muted">kein TMDb-Mapping</span>
+            <span class="muted">kein TMDB-Mapping</span>
           {% endif %}
         </td>
         <td>
@@ -115,7 +109,14 @@
     </tbody>
   </table>
 
-  <p class="muted">Streaming-Verfügbarkeitsdaten: JustWatch via TMDb. Diese Angaben werden nicht als deutsches Episoden-Release-Datum interpretiert.</p>
+  <section class="card credits" aria-labelledby="credits-heading">
+    <h2 id="credits-heading">Credits &amp; Datenquellen</h2>
+    <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" aria-label="The Movie Database (TMDB)">
+      <img class="tmdb-logo" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_1-5bdc75aaebeb75dc7ae79426ddd9be3b2be1e342510f8202baf6bffa71d7f5c4.svg" alt="TMDB">
+    </a>
+    <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+    <p class="muted">Streaming-Verfügbarkeitsdaten werden von JustWatch über die TMDB Watch-Provider-Endpunkte bereitgestellt. Diese Angaben werden nicht als deutsches Episoden-Release-Datum interpretiert.</p>
+  </section>
 </main>
 </body>
 </html>
