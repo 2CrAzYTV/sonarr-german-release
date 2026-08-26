@@ -1,5 +1,6 @@
 PROVIDER_PRIORITY = [
     "manual_de",
+    "tvmaze_de",
     "streaming_de",
     "tmdb_de",
     "sonarr_tvdb",
