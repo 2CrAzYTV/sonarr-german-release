@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from . import __all__  # noqa: F401
 from ..config import settings
 
 
