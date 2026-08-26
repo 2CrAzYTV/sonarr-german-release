@@ -22,7 +22,7 @@ from .providers import ImdbProvider, TmdbProvider
 from .resolver import resolve_release
 from .sonarr import SonarrClient
 
-app = FastAPI(title="Sonarr German Release", version="0.2.7")
+app = FastAPI(title="Sonarr German Release", version="0.2.8")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 imdb = ImdbProvider()
@@ -61,11 +61,12 @@ async def health():
     tmdb_status = tmdb.status()
     return {
         "status": "ok",
-        "version": "0.2.7",
+        "version": "0.2.8",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
         "imdb_api_configured": imdb_status.configured,
+        "imdb_missing_settings": settings.imdb_missing_settings,
         "tmdb_api_configured": tmdb_status.configured,
     }
 
