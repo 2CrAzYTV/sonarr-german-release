@@ -6,20 +6,20 @@
   <title>Sonarr German Release</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; background:#111827; color:#e5e7eb; }
-    main { max-width: 1300px; margin: 0 auto; padding: 24px; }
+    main { max-width: 1450px; margin: 0 auto; padding: 24px; }
     .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
     .card { background:#1f2937; border:1px solid #374151; border-radius:12px; padding:16px; }
     table { width:100%; border-collapse:collapse; margin-top:16px; }
     th,td { padding:10px; border-bottom:1px solid #374151; text-align:left; vertical-align:top; }
     th { color:#93c5fd; }
     .ok { color:#86efac; } .bad { color:#fca5a5; } .warn { color:#fcd34d; } .muted { color:#9ca3af; }
-    .tag { display:inline-block; padding:2px 7px; border:1px solid #4b5563; border-radius:999px; font-size:12px; margin-top:4px; }
+    .tag { display:inline-block; padding:2px 7px; border:1px solid #4b5563; border-radius:999px; font-size:12px; margin:2px 3px 2px 0; }
   </style>
 </head>
 <body>
 <main>
   <h1>Sonarr German Release</h1>
-  <p class="muted">v0.2.6 · Nur-Lese-Modus · Deutschland · IMDb-DE-first</p>
+  <p class="muted">v0.2.7 · Nur-Lese-Modus · Deutschland · IMDb-DE-first</p>
 
   {% if error %}
     <div class="card bad"><strong>Sonarr-Verbindung fehlgeschlagen:</strong> {{ error }}</div>
@@ -33,6 +33,7 @@
     <div class="card"><strong>Serien</strong><br>{{ series|length }}</div>
     <div class="card"><strong>IMDb-Mappings</strong><br>{{ mapping.imdb }} / {{ mapping.total }}</div>
     <div class="card"><strong>TMDb-Mappings</strong><br>{{ mapping.tmdb }} / {{ mapping.total }}</div>
+    <div class="card"><strong>DE-Streaming</strong><br>{{ streaming_sync.available }} / {{ streaming_sync.checked }} Staffeln</div>
     <div class="card"><strong>Release-Beobachtungen</strong><br>{{ db.releases }} · {{ db.providers }} Quellen</div>
     <div class="card">
       <strong>IMDb DE Provider</strong><br>
@@ -51,12 +52,13 @@
     {% if mapping.missing_imdb %}Bei {{ mapping.missing_imdb }} Serien fehlt sie noch.{% endif %}
     TMDb-Mappings: {{ mapping.tmdb }} / {{ mapping.total }}.
     {% if tmdb_sync.checked %}Letzter TMDb-Lauf: {{ tmdb_sync.mapped }} von {{ tmdb_sync.checked }} neu zugeordnet{% if tmdb_sync.errors %}, {{ tmdb_sync.errors }} Fehler{% endif %}.{% endif %}
+    {% if streaming_sync.checked %} DE-Streaming geprüft: {{ streaming_sync.available }} von {{ streaming_sync.checked }} Staffeln mit Verfügbarkeit{% if streaming_sync.errors %}, {{ streaming_sync.errors }} Fehler{% endif %}.{% endif %}
   </p>
 
   <h2>Kommende Episoden</h2>
   <table>
     <thead>
-      <tr><th>Serie</th><th>Episode</th><th>Titel</th><th>Sonarr-Datum</th><th>Deutschland</th><th>Quelle</th><th>Status</th></tr>
+      <tr><th>Serie</th><th>Episode</th><th>Titel</th><th>Sonarr-Datum</th><th>Deutschland</th><th>DE Streaming</th><th>Quelle</th><th>Status</th></tr>
     </thead>
     <tbody>
       {% for ep in episodes %}
@@ -75,6 +77,16 @@
             {{ format_datetime_de(result.release_date) }}
           {% else %}
             <span class="muted">noch nicht ermittelt</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if ep.streamingDE and ep.streamingDE.available %}
+            {% for provider in ep.streamingDE.providers %}<span class="tag">{{ provider }}</span>{% endfor %}
+            <br><span class="muted">JustWatch via TMDb · DE</span>
+          {% elif ep.tmdbSeriesId %}
+            <span class="muted">keine DE-Verfügbarkeit gemeldet</span>
+          {% else %}
+            <span class="muted">kein TMDb-Mapping</span>
           {% endif %}
         </td>
         <td>
@@ -98,10 +110,12 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="muted">Keine Episoden geladen.</td></tr>
+      <tr><td colspan="8" class="muted">Keine Episoden geladen.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+
+  <p class="muted">Streaming-Verfügbarkeitsdaten: JustWatch via TMDb. Diese Angaben werden nicht als deutsches Episoden-Release-Datum interpretiert.</p>
 </main>
 </body>
 </html>
