@@ -22,7 +22,7 @@
 <body>
 <main>
   <h1>Sonarr German Release</h1>
-  <p class="muted">v0.3.0 · Nur-Lese-Modus · Deutschland · TVmaze DE + TMDB + Sonarr</p>
+  <p class="muted">v0.3.1 · Nur-Lese-Modus · Deutschland · Wikipedia DE + TVmaze DE + optional TMDB + Sonarr</p>
 
   {% if error %}
     <div class="card bad"><strong>Sonarr-Verbindung fehlgeschlagen:</strong> {{ error }}</div>
@@ -34,11 +34,19 @@
       {% if status %}<span class="ok">Verbunden</span> · {{ status.version }}{% else %}<span class="bad">Nicht verbunden</span>{% endif %}
     </div>
     <div class="card"><strong>Serien</strong><br>{{ series|length }}</div>
-    <div class="card"><strong>TMDB-Mappings</strong><br>{{ mapping.tmdb }} / {{ mapping.total }}</div>
+    <div class="card"><strong>Wikidata-Mappings</strong><br>{{ wikipedia_sync.wikidata_mapped }} / {{ wikipedia_sync.checked }} kommende Serien</div>
+    <div class="card"><strong>Wikipedia DE-Seiten</strong><br>{{ wikipedia_sync.dewiki_pages }} / {{ wikipedia_sync.checked }} kommende Serien</div>
+    <div class="card"><strong>Wikipedia DE-Daten</strong><br>{{ wikipedia_sync.release_dates }} Episoden · {{ wikipedia_sync.pages_checked }} Seiten geprüft</div>
     <div class="card"><strong>TVmaze-Mappings</strong><br>{{ tvmaze_sync.mapped }} / {{ tvmaze_sync.checked }} kommende Serien</div>
     <div class="card"><strong>TVmaze DE-Daten</strong><br>{{ tvmaze_sync.release_dates }} Episoden · {{ tvmaze_sync.de_lists }} Serien</div>
+    <div class="card"><strong>TMDB-Mappings</strong><br>{{ mapping.tmdb }} / {{ mapping.total }}</div>
     <div class="card"><strong>DE-Streaming</strong><br>{{ streaming_sync.available }} / {{ streaming_sync.checked }} Staffeln</div>
     <div class="card"><strong>Release-Beobachtungen</strong><br>{{ db.releases }} · {{ db.providers }} Quellen</div>
+    <div class="card">
+      <strong>Wikipedia DE Provider</strong><br>
+      {% if wikipedia.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht aktiv</span>{% endif %}<br>
+      <span class="muted">{{ wikipedia.note }}</span>
+    </div>
     <div class="card">
       <strong>TVmaze DE Provider</strong><br>
       {% if tvmaze.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht aktiv</span>{% endif %}<br>
@@ -46,12 +54,13 @@
     </div>
     <div class="card">
       <strong>TMDB Provider</strong><br>
-      {% if tmdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht konfiguriert</span>{% endif %}<br>
+      {% if tmdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Optional · nicht konfiguriert</span>{% endif %}<br>
       <span class="muted">{{ tmdb.note }}</span>
     </div>
   </div>
 
   <p class="muted">
+    Wikipedia DE: {{ wikipedia_sync.wikidata_mapped }} von {{ wikipedia_sync.checked }} kommenden Serien exakt über Wikidata zugeordnet; {{ wikipedia_sync.dewiki_pages }} deutsche Wikipedia-Seiten gefunden; {{ wikipedia_sync.release_dates }} explizite deutsche Episodentermine{% if wikipedia_sync.errors %}, {{ wikipedia_sync.errors }} Fehler{% endif %}.
     TVmaze: {{ tvmaze_sync.mapped }} von {{ tvmaze_sync.checked }} kommenden Serien exakt über IMDb/TVDB zugeordnet; {{ tvmaze_sync.release_dates }} deutsche Episodentermine aus expliziten DE-Alternate-Lists{% if tvmaze_sync.errors %}, {{ tvmaze_sync.errors }} Fehler{% endif %}.
     TMDB-Mappings: {{ mapping.tmdb }} / {{ mapping.total }}.
     {% if tmdb_sync.checked %}Letzter TMDB-Lauf: {{ tmdb_sync.mapped }} von {{ tmdb_sync.checked }} zugeordnet oder aktualisiert{% if tmdb_sync.errors %}, {{ tmdb_sync.errors }} Fehler{% endif %}.{% endif %}
@@ -69,6 +78,8 @@
       <tr>
         <td>
           {{ ep.series.title if ep.series else "?" }}
+          {% if ep.wikidataQid %}<br><span class="muted">Wikidata: {{ ep.wikidataQid }}</span>{% endif %}
+          {% if ep.wikipediaDEUrl %}<br><a href="{{ ep.wikipediaDEUrl }}" target="_blank" rel="noopener noreferrer">Wikipedia DE</a>{% endif %}
           {% if ep.tvmazeSeriesId %}<br><span class="muted">TVmaze: {{ ep.tvmazeSeriesId }}</span>{% endif %}
           {% if ep.tmdbSeriesId %}<br><span class="muted">TMDB: {{ ep.tmdbSeriesId }}</span>{% endif %}
         </td>
@@ -86,8 +97,10 @@
           {% if ep.streamingDE and ep.streamingDE.available %}
             {% for provider in ep.streamingDE.providers %}<span class="tag">{{ provider }}</span>{% endfor %}
             <br><span class="muted">JustWatch via TMDB · DE</span>
-          {% elif ep.tmdbSeriesId %}
+          {% elif tmdb.active and ep.tmdbSeriesId %}
             <span class="muted">keine DE-Verfügbarkeit gemeldet</span>
+          {% elif not tmdb.active %}
+            <span class="muted">TMDB optional deaktiviert</span>
           {% else %}
             <span class="muted">kein TMDB-Mapping</span>
           {% endif %}
@@ -120,12 +133,14 @@
 
   <section class="card credits" aria-labelledby="credits-heading">
     <h2 id="credits-heading">Credits &amp; Datenquellen</h2>
+    <p><a href="https://www.wikidata.org" target="_blank" rel="noopener noreferrer">Wikidata</a> wird für die exakte Zuordnung vorhandener IMDb-/TheTVDB-IDs verwendet. Strukturierte Wikidata-Daten sind unter CC0 verfügbar.</p>
+    <p><a href="https://de.wikipedia.org" target="_blank" rel="noopener noreferrer">Wikipedia DE</a> wird ausschließlich über die offizielle MediaWiki Action API gelesen. Übernommen werden nur Tabellenfelder, die ausdrücklich eine deutsche oder deutschsprachige Erstausstrahlung ausweisen. Wikipedia-Texte stehen grundsätzlich unter CC BY-SA 4.0/GFDL; die jeweilige Artikelseite bleibt als Quelle verlinkt.</p>
     <p><a href="https://www.tvmaze.com" target="_blank" rel="noopener noreferrer">TVmaze</a> wird über die kostenlose öffentliche API für exakte Serien-Mappings und explizite deutsche Country-Premiere-Alternate-Lists verwendet.</p>
     <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" aria-label="The Movie Database (TMDB)">
       <img class="tmdb-logo" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_1-5bdc75aaebeb75dc7ae79426ddd9be3b2be1e342510f8202baf6bffa71d7f5c4.svg" alt="TMDB">
     </a>
     <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-    <p class="muted">Streaming-Verfügbarkeitsdaten werden von JustWatch über die TMDB Watch-Provider-Endpunkte bereitgestellt. Diese Angaben werden nicht als deutsches Episoden-Release-Datum interpretiert.</p>
+    <p class="muted">TMDB bleibt vollständig optional. Streaming-Verfügbarkeitsdaten werden nur bei konfiguriertem TMDB-Token von JustWatch über die TMDB Watch-Provider-Endpunkte bereitgestellt.</p>
   </section>
 </main>
 </body>
