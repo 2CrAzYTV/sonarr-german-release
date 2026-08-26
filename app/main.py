@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -20,11 +22,32 @@ from .providers import ImdbProvider, TmdbProvider
 from .resolver import resolve_release
 from .sonarr import SonarrClient
 
-app = FastAPI(title="Sonarr German Release", version="0.2.5")
+app = FastAPI(title="Sonarr German Release", version="0.2.6")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 imdb = ImdbProvider()
 tmdb = TmdbProvider()
+
+
+def format_datetime_de(value: str | None) -> str:
+    if not value:
+        return "-"
+
+    try:
+        normalized = value.strip()
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+
+        dt = datetime.fromisoformat(normalized)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(ZoneInfo(settings.tz))
+
+        return dt.strftime("%d.%m.%Y %H:%M")
+    except (ValueError, TypeError):
+        return value
+
+
+templates.env.globals["format_datetime_de"] = format_datetime_de
 
 
 @app.on_event("startup")
@@ -38,7 +61,7 @@ async def health():
     tmdb_status = tmdb.status()
     return {
         "status": "ok",
-        "version": "0.2.5",
+        "version": "0.2.6",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
