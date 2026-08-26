@@ -22,7 +22,7 @@ from .resolver import resolve_release
 from .sonarr import SonarrClient
 from .wikipedia_matcher import match_episode_by_title
 
-app = FastAPI(title="Sonarr German Release", version="0.3.4")
+app = FastAPI(title="Sonarr German Release", version="0.3.5")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 tmdb = TmdbProvider()
@@ -60,7 +60,7 @@ async def health():
     wikipedia_status = wikipedia.status()
     return {
         "status": "ok",
-        "version": "0.3.4",
+        "version": "0.3.5",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
@@ -104,7 +104,11 @@ async def enrich_streaming_de(episodes: list[dict]) -> dict:
             continue
         checked += 1
         try:
-            result = await tmdb.season_watch_providers(tmdb_id, season_number, country=settings.country)
+            result = await tmdb.season_watch_providers(
+                tmdb_id,
+                season_number,
+                country=settings.country,
+            )
             season_results[key] = result
             if result.get("available"):
                 available += 1
@@ -125,8 +129,9 @@ async def enrich_streaming_de(episodes: list[dict]) -> dict:
 async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
     checked = wikidata_mapped = dewiki_pages = pages_checked = 0
     tables_seen = de_tables = dated_rows = matched_rows = release_dates = 0
-    exact_matches = season_title_matches = assisted_matches = unique_title_matches = 0
+    exact_matches = season_title_matches = unique_title_matches = combined_matches = 0
     errors = 0
+    coverage: list[dict] = []
 
     grouped: dict[int, list[dict]] = {}
     for episode in episodes:
@@ -157,6 +162,27 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
             if mapping.get("dewiki_title"):
                 dewiki_pages += 1
 
+            wikipedia_seasons = sorted({key[0] for key in dates.keys() if key and key[0] is not None})
+            sonarr_seasons = sorted({ep.get("seasonNumber") for ep in series_episodes if ep.get("seasonNumber") is not None})
+            highest_wikipedia = max(wikipedia_seasons) if wikipedia_seasons else None
+            highest_sonarr = max(sonarr_seasons) if sonarr_seasons else None
+            gap = (
+                highest_wikipedia is not None
+                and highest_sonarr is not None
+                and highest_wikipedia < highest_sonarr
+            )
+            coverage.append({
+                "series": series.get("title") or (series_episodes[0].get("series") or {}).get("title") or str(sonarr_series_id),
+                "qid": mapping.get("qid"),
+                "dewiki_title": mapping.get("dewiki_title"),
+                "wikipedia_seasons": wikipedia_seasons,
+                "sonarr_seasons": sonarr_seasons,
+                "highest_wikipedia": highest_wikipedia,
+                "highest_sonarr": highest_sonarr,
+                "behind": gap,
+                "rows": len(dates),
+            })
+
             for episode in series_episodes:
                 episode["wikidataQid"] = mapping.get("qid")
                 episode["wikipediaDETitle"] = mapping.get("dewiki_title")
@@ -179,12 +205,8 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
                     exact_matches += 1
                 elif match_method == "season_title":
                     season_title_matches += 1
-                elif match_method in {
-                    "season_episode_title",
-                    "episode_title",
-                    "absolute_title",
-                }:
-                    assisted_matches += 1
+                elif match_method in {"season_episode_title", "episode_title", "absolute_title"}:
+                    combined_matches += 1
                 elif match_method == "unique_title":
                     unique_title_matches += 1
 
@@ -201,8 +223,23 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
                     "match_method": match_method,
                 }
                 release_dates += 1
-        except Exception:
+        except Exception as exc:
             errors += 1
+            coverage.append({
+                "series": series.get("title") or str(sonarr_series_id),
+                "qid": None,
+                "dewiki_title": None,
+                "wikipedia_seasons": [],
+                "sonarr_seasons": sorted({ep.get("seasonNumber") for ep in series_episodes if ep.get("seasonNumber") is not None}),
+                "highest_wikipedia": None,
+                "highest_sonarr": max([ep.get("seasonNumber") for ep in series_episodes if ep.get("seasonNumber") is not None], default=None),
+                "behind": False,
+                "rows": 0,
+                "error": str(exc)[:160],
+            })
+
+    coverage.sort(key=lambda item: (not item.get("behind", False), item.get("series", "").casefold()))
+    behind_count = sum(1 for item in coverage if item.get("behind"))
 
     return {
         "checked": checked,
@@ -216,8 +253,10 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
         "release_dates": release_dates,
         "exact_matches": exact_matches,
         "season_title_matches": season_title_matches,
-        "assisted_matches": assisted_matches,
+        "combined_matches": combined_matches,
         "unique_title_matches": unique_title_matches,
+        "coverage": coverage,
+        "behind_count": behind_count,
         "errors": errors,
     }
 
@@ -229,7 +268,6 @@ async def enrich_tvmaze_de(episodes: list[dict], series_by_id: dict[int, dict]) 
         series_id = episode.get("seriesId")
         if series_id:
             grouped.setdefault(series_id, []).append(episode)
-
     for sonarr_series_id, series_episodes in grouped.items():
         series = series_by_id.get(sonarr_series_id) or {}
         imdb_id = series.get("imdbId") or None
@@ -264,13 +302,7 @@ async def enrich_tvmaze_de(episodes: list[dict], series_by_id: dict[int, dict]) 
                 release_dates += 1
         except Exception:
             errors += 1
-    return {
-        "checked": checked,
-        "mapped": mapped,
-        "de_lists": de_lists,
-        "release_dates": release_dates,
-        "errors": errors,
-    }
+    return {"checked": checked, "mapped": mapped, "de_lists": de_lists, "release_dates": release_dates, "errors": errors}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -294,8 +326,10 @@ async def dashboard(request: Request):
         "release_dates": 0,
         "exact_matches": 0,
         "season_title_matches": 0,
-        "assisted_matches": 0,
+        "combined_matches": 0,
         "unique_title_matches": 0,
+        "coverage": [],
+        "behind_count": 0,
         "errors": 0,
     }
     release_data = {}
