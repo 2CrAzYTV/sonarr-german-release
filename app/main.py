@@ -22,7 +22,7 @@ from .resolver import resolve_release
 from .sonarr import SonarrClient
 from .wikipedia_matcher import match_episode_by_title
 
-app = FastAPI(title="Sonarr German Release", version="0.3.5")
+app = FastAPI(title="Sonarr German Release", version="0.3.6")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 tmdb = TmdbProvider()
@@ -60,7 +60,7 @@ async def health():
     wikipedia_status = wikipedia.status()
     return {
         "status": "ok",
-        "version": "0.3.5",
+        "version": "0.3.6",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
