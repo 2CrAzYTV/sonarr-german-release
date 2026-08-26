@@ -17,11 +17,17 @@ class TmdbProvider:
 
     TMDb does not expose a Germany-specific release-date endpoint for TV
     episodes. Therefore this provider must not label the generic episode
-    air_date as a German release date. It is currently used for identifier
-    mapping and future corroboration only.
+    air_date as a German release date.
+
+    The watch-provider endpoints are country-specific and are powered by
+    JustWatch. They are used only as a Germany streaming-availability signal,
+    never as an episode release timestamp.
     """
 
     name = "tmdb_de"
+
+    def __init__(self):
+        self._watch_cache: dict[tuple[int, int, str], dict] = {}
 
     @property
     def headers(self) -> dict[str, str]:
@@ -38,7 +44,7 @@ class TmdbProvider:
                 name=self.name,
                 configured=True,
                 active=True,
-                note="TMDb API konfiguriert · Mapping/Fallback aktiv",
+                note="TMDb API konfiguriert · Mapping + DE-Streaming aktiv",
             )
         return ProviderStatus(
             name=self.name,
@@ -96,3 +102,51 @@ class TmdbProvider:
             f"tv/{tmdb_series_id}/season/{season_number}/episode/{episode_number}",
             params={"language": settings.language},
         )
+
+    async def season_watch_providers(
+        self,
+        tmdb_series_id: int,
+        season_number: int,
+        country: str = "DE",
+    ) -> dict:
+        """Return country-specific streaming availability for one TV season.
+
+        The result intentionally contains provider availability only. No date
+        is inferred from this endpoint.
+        """
+        cache_key = (tmdb_series_id, season_number, country.upper())
+        if cache_key in self._watch_cache:
+            return self._watch_cache[cache_key]
+
+        data = await self._get(
+            f"tv/{tmdb_series_id}/season/{season_number}/watch/providers"
+        )
+        region = (data.get("results") or {}).get(country.upper()) or {}
+
+        provider_groups = {}
+        provider_names = []
+        seen = set()
+
+        for group in ("flatrate", "free", "ads", "rent", "buy"):
+            names = []
+            for item in region.get(group) or []:
+                name = item.get("provider_name")
+                if not name:
+                    continue
+                names.append(name)
+                if name not in seen:
+                    provider_names.append(name)
+                    seen.add(name)
+            if names:
+                provider_groups[group] = names
+
+        result = {
+            "available": bool(provider_names),
+            "providers": provider_names,
+            "groups": provider_groups,
+            "link": region.get("link"),
+            "source": "JustWatch via TMDb",
+            "country": country.upper(),
+        }
+        self._watch_cache[cache_key] = result
+        return result
