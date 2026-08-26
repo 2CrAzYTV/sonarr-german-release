@@ -4,13 +4,14 @@ Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichung
 
 ## Aktueller Stand
 
-Version 0.3.1 ist absichtlich **read-only**:
+Version 0.3.3 ist absichtlich **read-only**:
 
 - Verbindung zu Sonarr über API v3
 - Serien und kommende Episoden aus Sonarr einlesen
 - deutsche Episodendaten über kostenlose/keylose Quellen ergänzen
 - Wikidata für exakte Serienzuordnung über IMDb-/TheTVDB-IDs
 - Wikipedia DE für explizit gekennzeichnete deutsche/deutschsprachige Erstausstrahlungsdaten
+- mehrstufiges Wikipedia↔Sonarr-Episodenmatching
 - TVmaze DE Alternate Lists als weitere kostenlose Quelle
 - TMDB bleibt optional für Mapping und DE-Streaming-Verfügbarkeit
 - SQLite-Datenbank für mehrere Quellen
@@ -39,7 +40,18 @@ Wikidata wird ausschließlich für exakte Zuordnungen verwendet:
 - TheTVDB series ID (`P4835`)
 - deutscher Wikipedia-Sitelink
 
-Wikipedia DE wird ausschließlich über die offizielle MediaWiki Action API gelesen. Der Parser akzeptiert nur Episodentabellen, deren Spalten ausdrücklich eine deutsche/deutschsprachige Erstausstrahlung kennzeichnen. Wird Staffel/Episode nicht eindeutig erkannt, wird kein Datum gespeichert.
+Wikipedia DE wird ausschließlich über die offizielle MediaWiki Action API gelesen. Der Parser akzeptiert nur Episodentabellen, deren Spalten ausdrücklich eine deutsche/deutschsprachige Erstausstrahlung kennzeichnen.
+
+### Episoden-Matching ab v0.3.3
+
+Ein deutsches Datum wird nur übernommen, wenn ein konservativer Match gelingt:
+
+1. exakte Staffel-/Episodennummer (`SxxExx`) → Confidence `very_high`
+2. gleiche Staffel + eindeutig identischer Episodentitel → Confidence `high`
+3. innerhalb der Serie eindeutig identischer Episodentitel → Confidence `medium`
+4. bei mehreren möglichen Treffern oder `TBA` wird nichts übernommen
+
+Damit können Unterschiede in der Episodennummerierung zwischen Wikipedia und Sonarr abgefangen werden, ohne unsichere Daten automatisch zu übernehmen.
 
 Die WebUI verlinkt die jeweilige deutsche Wikipedia-Seite als Quelle.
 
@@ -102,10 +114,14 @@ TVmaze, Wikidata und Wikipedia benötigen keine zusätzlichen Variablen oder Zug
 
 Sonarr → Settings → General → Security → API Key
 
+## Entwicklungs-Hinweis
+
+Die aktuellen Parser-/Matcher-Diagnosewerte in der WebUI sind nur für die Entwicklungsphase vorgesehen und werden vor einer öffentlichen Veröffentlichung entfernt.
+
 ## Nächste Schritte
 
-1. Abdeckung der Wikipedia-DE-Episodentabellen mit realen Serien prüfen
-2. Tabellenparser anhand problematischer Serien gezielt erweitern
+1. Abdeckung des neuen Wikipedia-Matchers mit realen Serien prüfen
+2. problematische Titel-/Nummerierungsfälle gezielt erweitern
 3. Quellenkonflikte und Confidence weiter verfeinern
 4. TMDB nur bei Bedarf optional aktivieren
 5. später Hybrid-Modus für Freigabe der Sonarr-Suche
