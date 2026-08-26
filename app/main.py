@@ -20,8 +20,9 @@ from .db import (
 from .providers import TmdbProvider, TvmazeProvider, WikimediaProvider
 from .resolver import resolve_release
 from .sonarr import SonarrClient
+from .wikipedia_matcher import match_episode_by_title
 
-app = FastAPI(title="Sonarr German Release", version="0.3.2")
+app = FastAPI(title="Sonarr German Release", version="0.3.3")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 tmdb = TmdbProvider()
@@ -62,7 +63,7 @@ async def health():
     wikipedia_status = wikipedia.status()
     return {
         "status": "ok",
-        "version": "0.3.2",
+        "version": "0.3.3",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
@@ -150,6 +151,9 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
     dated_rows = 0
     matched_rows = 0
     release_dates = 0
+    exact_matches = 0
+    season_title_matches = 0
+    unique_title_matches = 0
     errors = 0
 
     grouped: dict[int, list[dict]] = {}
@@ -191,17 +195,36 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
 
                 key = (episode.get("seasonNumber"), episode.get("episodeNumber"))
                 observation = dates.get(key)
+                match_method = "exact_number" if observation else None
+
+                if not observation and mapping.get("dewiki_title"):
+                    observation = await match_episode_by_title(wikipedia, mapping, episode)
+                    match_method = observation.get("match_method") if observation else None
+
                 if not observation:
                     continue
+
+                confidence = observation.get("confidence") or "medium"
+                if match_method == "exact_number":
+                    confidence = "very_high"
+                    exact_matches += 1
+                elif match_method == "season_title":
+                    season_title_matches += 1
+                elif match_method == "unique_title":
+                    unique_title_matches += 1
 
                 upsert_episode_release(
                     episode,
                     provider="wikipedia_de",
                     release_date=observation["release_date"],
-                    confidence=observation["confidence"],
+                    confidence=confidence,
                     note=observation["note"],
                 )
-                episode["wikipediaDE"] = observation
+                episode["wikipediaDE"] = {
+                    **observation,
+                    "confidence": confidence,
+                    "match_method": match_method,
+                }
                 release_dates += 1
         except Exception:
             errors += 1
@@ -216,6 +239,9 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
         "dated_rows": dated_rows,
         "matched_rows": matched_rows,
         "release_dates": release_dates,
+        "exact_matches": exact_matches,
+        "season_title_matches": season_title_matches,
+        "unique_title_matches": unique_title_matches,
         "errors": errors,
     }
 
@@ -301,6 +327,9 @@ async def dashboard(request: Request):
         "dated_rows": 0,
         "matched_rows": 0,
         "release_dates": 0,
+        "exact_matches": 0,
+        "season_title_matches": 0,
+        "unique_title_matches": 0,
         "errors": 0,
     }
     release_data = {}
