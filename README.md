@@ -4,18 +4,19 @@ Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichung
 
 ## Aktueller Stand
 
-Version 0.2.1 ist absichtlich **read-only**:
+Version 0.2.4 ist absichtlich **read-only**:
 
 - Verbindung zu Sonarr über API v3
 - Serien aus Sonarr einlesen
 - kommende Episoden aus Sonarr einlesen
 - Sonarr-IMDb-IDs automatisch übernehmen
-- SQLite-Datenbank vorbereiten
+- TMDb-Mappings optional über externe IDs ergänzen
+- SQLite-Datenbank für mehrere Quellen
 - WebUI intern auf Port 8788
 - Unraid Host-Port 8789
 - keine Änderungen an Sonarr
 - keine Episode wird automatisch auf monitored/unmonitored gesetzt
-- Mehrquellen-Architektur für deutsche Releasedaten
+- Mehrquellen-Architektur mit Konflikterkennung
 
 ## Quellen-Priorität
 
@@ -23,10 +24,11 @@ Das Projekt verlässt sich nicht auf eine einzelne Metadatenquelle.
 
 Priorität:
 
-1. `IMDb DE` – bevorzugte Quelle für deutsche Veröffentlichungstermine
-2. `Streaming DE` – später für Netflix, Disney+, Prime Video usw.
-3. `TMDb DE` – nur Fallback bzw. zusätzliche Bestätigung
-4. `Sonarr/TVDB` – letzter Fallback
+1. `manual_de` – manuell bestätigte deutsche Daten
+2. `imdb_de` – bevorzugte externe Quelle für deutsche Veröffentlichungstermine
+3. `streaming_de` – später für Netflix, Disney+, Prime Video usw.
+4. `tmdb_de` – Mapping/Fallback bzw. zusätzliche Bestätigung
+5. `sonarr_tvdb` – letzter Fallback
 
 Jede Quelle wird separat gespeichert. Bei unterschiedlichen Datumsangaben wird ein Konflikt angezeigt, statt still eine Quelle zu überschreiben.
 
@@ -34,7 +36,7 @@ Jede Quelle wird separat gespeichert. Bei unterschiedlichen Datumsangaben wird e
 
 Für IMDb wird bewusst **kein Webseiten-Scraping** verwendet. Vorgesehen ist die offizielle IMDb GraphQL API über AWS Data Exchange.
 
-Der Provider ist optional: Ohne IMDb-Zugang startet der Container normal weiter und zeigt den Provider als vorbereitet, aber nicht aktiv an.
+Der Provider ist optional: Ohne IMDb-Zugang startet der Container normal weiter und zeigt den Provider als nicht konfiguriert an.
 
 Optionale Unraid-Container-Variablen für IMDb:
 
@@ -45,6 +47,24 @@ Optionale Unraid-Container-Variablen für IMDb:
 - `IMDB_AWS_SESSION_TOKEN` – nur falls benötigt
 
 Diese Zugangsdaten gehören ausschließlich in die Unraid-Container-Konfiguration und niemals ins Repository.
+
+## TMDb API
+
+TMDb wird bewusst **nicht als alleinige Quelle für deutsche Episoden-Releasedaten** verwendet.
+
+Wichtig: TMDb bietet für TV-Episoden keinen eigenen Deutschland-Release-Date-Endpunkt wie bei Filmen. Das normale Episodenfeld `air_date` wird deshalb **nicht** als deutsches Veröffentlichungsdatum gespeichert.
+
+TMDb wird aktuell verwendet für:
+
+- Zuordnung IMDb/TVDB → TMDb-Serie
+- zusätzliche Serien-/Episoden-Metadaten
+- spätere Bestätigung anderer Quellen
+
+Optionale Unraid-Container-Variable:
+
+- `TMDB_API_TOKEN` – TMDb API Read Access Token
+
+Ohne Token läuft der Container normal weiter; der TMDb-Provider bleibt deaktiviert.
 
 ## Konfiguration
 
@@ -68,9 +88,10 @@ Secrets und Zugangsdaten werden niemals im Repository hinterlegt.
 Vorgesehene Werte:
 
 - Container Name: `sonarr-german-release`
+- Repository: `ghcr.io/2crazytv/sonarr-german-release:latest`
 - WebUI Host-Port: `8789`
 - Container-Port: `8788`
-- Appdata: `/mnt/user/appdata/sonarr-german-release/`
+- Appdata: `/mnt/cache/appdata/sonarr-german-release/data`
 - Container-Pfad: `/data`
 - Restart Policy: `unless-stopped`
 
@@ -80,10 +101,10 @@ Sonarr → Settings → General → Security → API Key
 
 ## Nächste Schritte
 
-1. offiziellen IMDb-GraphQL-Request signieren und testen
-2. Episoden einer Sonarr-Serie auf IMDb-Episoden abbilden
-3. deutsche Release-Daten pro Episode speichern
-4. Quellenkonflikte in der WebUI anzeigen
-5. optional Streaming-DE-Provider ergänzen
+1. TMDb-Token optional in Unraid hinterlegen und Mapping prüfen
+2. offiziellen IMDb-GraphQL-Request signieren und testen
+3. Episoden einer Sonarr-Serie auf IMDb-Episoden abbilden
+4. deutsche Release-Daten pro Episode speichern
+5. Streaming-DE-Provider ergänzen
 6. Hybrid-Modus für Freigabe der Sonarr-Suche
 7. erst danach optional schreibende Sonarr-Automation
