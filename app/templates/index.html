@@ -12,23 +12,42 @@
     table { width:100%; border-collapse:collapse; margin-top:16px; }
     th,td { padding:10px; border-bottom:1px solid #374151; text-align:left; }
     th { color:#93c5fd; }
-    .ok { color:#86efac; } .bad { color:#fca5a5; } .muted { color:#9ca3af; }
+    .ok { color:#86efac; } .bad { color:#fca5a5; } .warn { color:#fcd34d; } .muted { color:#9ca3af; }
   </style>
 </head>
 <body>
 <main>
   <h1>Sonarr German Release</h1>
-  <p class="muted">v0.1.1 · Nur-Lese-Modus · Deutschland</p>
-  {% if error %}<div class="card bad"><strong>Sonarr-Verbindung fehlgeschlagen:</strong> {{ error }}</div>{% endif %}
+  <p class="muted">v0.2.1 · Nur-Lese-Modus · Deutschland · IMDb-DE-first</p>
+
+  {% if error %}
+    <div class="card bad"><strong>Sonarr-Verbindung fehlgeschlagen:</strong> {{ error }}</div>
+  {% endif %}
+
   <div class="grid">
-    <div class="card"><strong>Sonarr</strong><br>{% if status %}<span class="ok">Verbunden</span> · {{ status.version }}{% else %}<span class="bad">Nicht verbunden</span>{% endif %}</div>
+    <div class="card">
+      <strong>Sonarr</strong><br>
+      {% if status %}<span class="ok">Verbunden</span> · {{ status.version }}{% else %}<span class="bad">Nicht verbunden</span>{% endif %}
+    </div>
     <div class="card"><strong>Serien</strong><br>{{ series|length }}</div>
-    <div class="card"><strong>Kommende Episoden</strong><br>{{ episodes|length }}</div>
-    <div class="card"><strong>Lokale Release-Einträge</strong><br>{{ db.releases }}</div>
+    <div class="card"><strong>IMDb-Mappings</strong><br>{{ mapping.imdb }} / {{ mapping.total }}</div>
+    <div class="card">
+      <strong>IMDb DE Provider</strong><br>
+      {% if imdb.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Vorbereitet</span>{% endif %}<br>
+      <span class="muted">{{ imdb.note }}</span>
+    </div>
   </div>
+
+  <p class="muted">
+    Sonarr liefert für {{ mapping.imdb }} Serien bereits eine IMDb-ID.
+    {% if mapping.missing_imdb %}Bei {{ mapping.missing_imdb }} Serien fehlt sie noch.{% endif %}
+  </p>
+
   <h2>Kommende Episoden (Sonarr-Daten)</h2>
   <table>
-    <thead><tr><th>Serie</th><th>Episode</th><th>Titel</th><th>Sonarr-Datum</th><th>Deutschland</th><th>Quelle</th></tr></thead>
+    <thead>
+      <tr><th>Serie</th><th>Episode</th><th>Titel</th><th>Sonarr-Datum</th><th>Deutschland</th><th>Quelle</th></tr>
+    </thead>
     <tbody>
       {% for ep in episodes %}
       <tr>
@@ -37,9 +56,11 @@
         <td>{{ ep.title or "-" }}</td>
         <td>{{ ep.airDateUtc or ep.airDate or "-" }}</td>
         <td class="muted">noch nicht ermittelt</td>
-        <td class="muted">—</td>
+        <td class="muted">IMDb DE → Fallbacks</td>
       </tr>
-      {% else %}<tr><td colspan="6" class="muted">Keine Episoden geladen.</td></tr>{% endfor %}
+      {% else %}
+      <tr><td colspan="6" class="muted">Keine Episoden geladen.</td></tr>
+      {% endfor %}
     </tbody>
   </table>
 </main>
