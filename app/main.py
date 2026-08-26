@@ -22,7 +22,7 @@ from .resolver import resolve_release
 from .sonarr import SonarrClient
 from .wikipedia_matcher import match_episode_by_title
 
-app = FastAPI(title="Sonarr German Release", version="0.3.3")
+app = FastAPI(title="Sonarr German Release", version="0.3.4")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 tmdb = TmdbProvider()
@@ -33,16 +33,13 @@ wikipedia = WikimediaProvider()
 def format_datetime_de(value: str | None) -> str:
     if not value:
         return "-"
-
     try:
         normalized = value.strip()
         if normalized.endswith("Z"):
             normalized = normalized[:-1] + "+00:00"
-
         dt = datetime.fromisoformat(normalized)
         if dt.tzinfo is not None:
             dt = dt.astimezone(ZoneInfo(settings.tz))
-
         return dt.strftime("%d.%m.%Y %H:%M")
     except (ValueError, TypeError):
         return value
@@ -63,7 +60,7 @@ async def health():
     wikipedia_status = wikipedia.status()
     return {
         "status": "ok",
-        "version": "0.3.3",
+        "version": "0.3.4",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
@@ -76,11 +73,7 @@ async def health():
 async def sync_tmdb_mappings() -> dict:
     if not settings.tmdb_api_configured:
         return {"checked": 0, "mapped": 0, "errors": 0}
-
-    checked = 0
-    mapped = 0
-    errors = 0
-
+    checked = mapped = errors = 0
     for item in series_missing_tmdb_mapping(limit=500):
         checked += 1
         try:
@@ -93,19 +86,14 @@ async def sync_tmdb_mappings() -> dict:
                 mapped += 1
         except Exception:
             errors += 1
-
     return {"checked": checked, "mapped": mapped, "errors": errors}
 
 
 async def enrich_streaming_de(episodes: list[dict]) -> dict:
     if not settings.tmdb_api_configured:
         return {"checked": 0, "available": 0, "errors": 0}
-
-    checked = 0
-    available = 0
-    errors = 0
+    checked = available = errors = 0
     season_results: dict[tuple[int, int], dict] = {}
-
     for episode in episodes:
         tmdb_id = episode.get("tmdbSeriesId")
         season_number = episode.get("seasonNumber")
@@ -114,14 +102,9 @@ async def enrich_streaming_de(episodes: list[dict]) -> dict:
         key = (tmdb_id, season_number)
         if key in season_results:
             continue
-
         checked += 1
         try:
-            result = await tmdb.season_watch_providers(
-                tmdb_id,
-                season_number,
-                country=settings.country,
-            )
+            result = await tmdb.season_watch_providers(tmdb_id, season_number, country=settings.country)
             season_results[key] = result
             if result.get("available"):
                 available += 1
@@ -133,27 +116,16 @@ async def enrich_streaming_de(episodes: list[dict]) -> dict:
                 "source": "JustWatch via TMDB",
                 "error": str(exc),
             }
-
     for episode in episodes:
         key = (episode.get("tmdbSeriesId"), episode.get("seasonNumber"))
         episode["streamingDE"] = season_results.get(key)
-
     return {"checked": checked, "available": available, "errors": errors}
 
 
 async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
-    checked = 0
-    wikidata_mapped = 0
-    dewiki_pages = 0
-    pages_checked = 0
-    tables_seen = 0
-    de_tables = 0
-    dated_rows = 0
-    matched_rows = 0
-    release_dates = 0
-    exact_matches = 0
-    season_title_matches = 0
-    unique_title_matches = 0
+    checked = wikidata_mapped = dewiki_pages = pages_checked = 0
+    tables_seen = de_tables = dated_rows = matched_rows = release_dates = 0
+    exact_matches = season_title_matches = assisted_matches = unique_title_matches = 0
     errors = 0
 
     grouped: dict[int, list[dict]] = {}
@@ -171,10 +143,7 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
 
         checked += 1
         try:
-            payload = await wikipedia.german_episode_dates(
-                imdb_id=imdb_id,
-                tvdb_id=tvdb_id,
-            )
+            payload = await wikipedia.german_episode_dates(imdb_id=imdb_id, tvdb_id=tvdb_id)
             mapping = payload.get("mapping") or {}
             dates = payload.get("dates") or {}
             pages_checked += payload.get("pages_checked") or 0
@@ -210,6 +179,12 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
                     exact_matches += 1
                 elif match_method == "season_title":
                     season_title_matches += 1
+                elif match_method in {
+                    "season_episode_title",
+                    "episode_title",
+                    "absolute_title",
+                }:
+                    assisted_matches += 1
                 elif match_method == "unique_title":
                     unique_title_matches += 1
 
@@ -241,18 +216,14 @@ async def enrich_wikipedia_de(episodes: list[dict], series_by_id: dict[int, dict
         "release_dates": release_dates,
         "exact_matches": exact_matches,
         "season_title_matches": season_title_matches,
+        "assisted_matches": assisted_matches,
         "unique_title_matches": unique_title_matches,
         "errors": errors,
     }
 
 
 async def enrich_tvmaze_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
-    checked = 0
-    mapped = 0
-    de_lists = 0
-    release_dates = 0
-    errors = 0
-
+    checked = mapped = de_lists = release_dates = errors = 0
     grouped: dict[int, list[dict]] = {}
     for episode in episodes:
         series_id = episode.get("seriesId")
@@ -265,28 +236,23 @@ async def enrich_tvmaze_de(episodes: list[dict], series_by_id: dict[int, dict]) 
         tvdb_id = series.get("tvdbId") or None
         if not imdb_id and not tvdb_id:
             continue
-
         checked += 1
         try:
             show = await tvmaze.lookup_show(imdb_id=imdb_id, tvdb_id=tvdb_id)
             if not show or not show.get("id"):
                 continue
-
             tvmaze_id = show["id"]
             mapped += 1
             for episode in series_episodes:
                 episode["tvmazeSeriesId"] = tvmaze_id
-
             dates = await tvmaze.german_episode_dates(tvmaze_id)
             if dates:
                 de_lists += 1
-
             for episode in series_episodes:
                 key = (episode.get("seasonNumber"), episode.get("episodeNumber"))
                 observation = dates.get(key)
                 if not observation:
                     continue
-
                 upsert_episode_release(
                     episode,
                     provider="tvmaze_de",
@@ -298,7 +264,6 @@ async def enrich_tvmaze_de(episodes: list[dict], series_by_id: dict[int, dict]) 
                 release_dates += 1
         except Exception:
             errors += 1
-
     return {
         "checked": checked,
         "mapped": mapped,
@@ -329,6 +294,7 @@ async def dashboard(request: Request):
         "release_dates": 0,
         "exact_matches": 0,
         "season_title_matches": 0,
+        "assisted_matches": 0,
         "unique_title_matches": 0,
         "errors": 0,
     }
@@ -344,10 +310,7 @@ async def dashboard(request: Request):
 
         now = datetime.now(timezone.utc)
         end = now + timedelta(days=45)
-        episodes = await sonarr.calendar(
-            start=now.isoformat(),
-            end=end.isoformat(),
-        )
+        episodes = await sonarr.calendar(start=now.isoformat(), end=end.isoformat())
         episodes.sort(key=lambda item: item.get("airDateUtc") or "9999")
 
         for episode in episodes:
