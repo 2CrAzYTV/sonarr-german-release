@@ -22,7 +22,7 @@ from .providers import ImdbProvider, TmdbProvider
 from .resolver import resolve_release
 from .sonarr import SonarrClient
 
-app = FastAPI(title="Sonarr German Release", version="0.2.6")
+app = FastAPI(title="Sonarr German Release", version="0.2.7")
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 imdb = ImdbProvider()
@@ -61,7 +61,7 @@ async def health():
     tmdb_status = tmdb.status()
     return {
         "status": "ok",
-        "version": "0.2.6",
+        "version": "0.2.7",
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
@@ -78,8 +78,6 @@ async def sync_tmdb_mappings() -> dict:
     mapped = 0
     errors = 0
 
-    # A normal Sonarr library is small enough to resolve all currently
-    # missing mappings in one pass. Already mapped entries are skipped.
     for item in series_missing_tmdb_mapping(limit=500):
         checked += 1
         try:
@@ -96,6 +94,51 @@ async def sync_tmdb_mappings() -> dict:
     return {"checked": checked, "mapped": mapped, "errors": errors}
 
 
+async def enrich_streaming_de(episodes: list[dict]) -> dict:
+    """Attach DE streaming availability to episodes on a season basis."""
+    if not settings.tmdb_api_configured:
+        return {"checked": 0, "available": 0, "errors": 0}
+
+    checked = 0
+    available = 0
+    errors = 0
+    season_results: dict[tuple[int, int], dict] = {}
+
+    for episode in episodes:
+        tmdb_id = episode.get("tmdbSeriesId")
+        season_number = episode.get("seasonNumber")
+        if not tmdb_id or season_number is None:
+            continue
+        key = (tmdb_id, season_number)
+        if key in season_results:
+            continue
+
+        checked += 1
+        try:
+            result = await tmdb.season_watch_providers(
+                tmdb_id,
+                season_number,
+                country=settings.country,
+            )
+            season_results[key] = result
+            if result.get("available"):
+                available += 1
+        except Exception as exc:
+            errors += 1
+            season_results[key] = {
+                "available": False,
+                "providers": [],
+                "source": "JustWatch via TMDb",
+                "error": str(exc),
+            }
+
+    for episode in episodes:
+        key = (episode.get("tmdbSeriesId"), episode.get("seasonNumber"))
+        episode["streamingDE"] = season_results.get(key)
+
+    return {"checked": checked, "available": available, "errors": errors}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     error = None
@@ -104,6 +147,7 @@ async def dashboard(request: Request):
     episodes = []
     mapping_sync = {"mapped": 0, "missing_imdb": 0}
     tmdb_sync = {"checked": 0, "mapped": 0, "errors": 0}
+    streaming_sync = {"checked": 0, "available": 0, "errors": 0}
     release_data = {}
     resolved = {}
 
@@ -133,6 +177,8 @@ async def dashboard(request: Request):
             episode["imdbSeriesId"] = get_imdb_mapping(episode.get("seriesId"))
             episode["tmdbSeriesId"] = get_tmdb_mapping(episode.get("seriesId"))
 
+        streaming_sync = await enrich_streaming_de(episodes)
+
         episode_ids = [episode.get("id") for episode in episodes if episode.get("id")]
         release_data = episode_release_map(episode_ids)
         resolved = {
@@ -156,6 +202,7 @@ async def dashboard(request: Request):
             "mapping": mapping_stats(),
             "mapping_sync": mapping_sync,
             "tmdb_sync": tmdb_sync,
+            "streaming_sync": streaming_sync,
             "imdb": imdb.status(),
             "tmdb": tmdb.status(),
             "settings": settings,
