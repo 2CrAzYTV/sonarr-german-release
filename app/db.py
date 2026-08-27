@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS episode_releases (
     episode_title TEXT,
     provider TEXT NOT NULL,
     release_date TEXT,
+    release_type TEXT,
     country TEXT NOT NULL DEFAULT 'DE',
     confidence TEXT,
     note TEXT,
@@ -44,11 +45,15 @@ def init_db():
     path.parent.mkdir(parents=True, exist_ok=True)
     with _connect() as conn:
         conn.executescript(SCHEMA)
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(provider_mappings)")}
-        if "series_title" not in columns:
+        mapping_columns = {row[1] for row in conn.execute("PRAGMA table_info(provider_mappings)")}
+        if "series_title" not in mapping_columns:
             conn.execute("ALTER TABLE provider_mappings ADD COLUMN series_title TEXT")
-        if "tmdb_checked_at" not in columns:
+        if "tmdb_checked_at" not in mapping_columns:
             conn.execute("ALTER TABLE provider_mappings ADD COLUMN tmdb_checked_at TEXT")
+
+        release_columns = {row[1] for row in conn.execute("PRAGMA table_info(episode_releases)")}
+        if "release_type" not in release_columns:
+            conn.execute("ALTER TABLE episode_releases ADD COLUMN release_type TEXT")
 
 
 def sync_series_mappings(series_list: list[dict]) -> dict:
@@ -159,6 +164,7 @@ def upsert_episode_release(
     episode: dict,
     provider: str,
     release_date: str | None = None,
+    release_type: str | None = None,
     confidence: str | None = None,
     note: str | None = None,
 ):
@@ -169,8 +175,8 @@ def upsert_episode_release(
             INSERT INTO episode_releases (
                 sonarr_episode_id, sonarr_series_id, series_title,
                 season_number, episode_number, episode_title,
-                provider, release_date, country, confidence, note, checked_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                provider, release_date, release_type, country, confidence, note, checked_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(sonarr_episode_id, provider) DO UPDATE SET
                 sonarr_series_id=excluded.sonarr_series_id,
                 series_title=excluded.series_title,
@@ -178,6 +184,7 @@ def upsert_episode_release(
                 episode_number=excluded.episode_number,
                 episode_title=excluded.episode_title,
                 release_date=excluded.release_date,
+                release_type=excluded.release_type,
                 country=excluded.country,
                 confidence=excluded.confidence,
                 note=excluded.note,
@@ -192,6 +199,7 @@ def upsert_episode_release(
                 episode.get("title"),
                 provider,
                 release_date,
+                release_type,
                 settings.country,
                 confidence,
                 note,
@@ -204,7 +212,7 @@ def episode_release_map(episode_ids: list[int]):
         return {}
     placeholders = ",".join("?" for _ in episode_ids)
     query = f'''
-        SELECT sonarr_episode_id, provider, release_date, confidence, note
+        SELECT sonarr_episode_id, provider, release_date, release_type, confidence, note
         FROM episode_releases
         WHERE sonarr_episode_id IN ({placeholders})
     '''
@@ -213,6 +221,7 @@ def episode_release_map(episode_ids: list[int]):
         for row in conn.execute(query, episode_ids):
             result.setdefault(row["sonarr_episode_id"], {})[row["provider"]] = {
                 "release_date": row["release_date"],
+                "release_type": row["release_type"],
                 "confidence": row["confidence"],
                 "note": row["note"],
             }
