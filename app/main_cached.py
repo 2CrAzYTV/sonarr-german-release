@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from . import main as core
 from .providers import FernsehserienProvider
 
-APP_VERSION = "0.3.11"
+APP_VERSION = "0.3.12"
 REFRESH_INTERVAL_SECONDS = 1800
 
 app = FastAPI(title="Sonarr German Release", version=APP_VERSION)
@@ -68,6 +68,7 @@ async def enrich_fernsehserien_de(episodes: list[dict], series_by_id: dict[int, 
                     episode,
                     provider="fernsehserien_de",
                     release_date=observation["release_date"],
+                    release_type=observation.get("release_type") or "de_release",
                     confidence=observation.get("confidence") or "high",
                     note=observation.get("note") or "Deutscher Episodentermin laut fernsehserien.de",
                 )
@@ -116,6 +117,7 @@ async def build_snapshot() -> dict:
             episode,
             provider="sonarr_tvdb",
             release_date=sonarr_date,
+            release_type="sonarr_fallback",
             confidence="low",
             note="Sonarr/TVDB fallback",
         )
