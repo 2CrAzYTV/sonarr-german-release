@@ -17,8 +17,21 @@ CONFIDENCE_ORDER = {
 }
 
 
+def _release_day(value: str | None) -> str | None:
+    """Return the calendar day of a release observation.
+
+    Some providers, such as fernsehserien.de, publish a release date without a
+    clock time, while Sonarr often provides an exact UTC timestamp. For the
+    German-release resolver, observations on the same calendar day agree.
+    """
+    if not value:
+        return None
+    value = value.strip()
+    return value[:10] if len(value) >= 10 else value
+
+
 def resolve_release(observations: dict) -> dict:
-    """Resolve the best release observation without hiding conflicts."""
+    """Resolve the best release observation without hiding real date conflicts."""
     valid = {
         provider: data
         for provider, data in (observations or {}).items()
@@ -34,8 +47,12 @@ def resolve_release(observations: dict) -> dict:
             "sources": [],
         }
 
-    dates = {data.get("release_date") for data in valid.values()}
-    conflict = len(dates) > 1
+    release_days = {
+        _release_day(data.get("release_date"))
+        for data in valid.values()
+        if _release_day(data.get("release_date"))
+    }
+    conflict = len(release_days) > 1
 
     ranked = []
     for provider, data in valid.items():
