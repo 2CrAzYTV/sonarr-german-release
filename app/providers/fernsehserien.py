@@ -28,7 +28,7 @@ class FernsehserienProvider:
     base_url = "https://www.fernsehserien.de"
     cache_ttl_seconds = 6 * 60 * 60
     user_agent = (
-        "SonarrGermanRelease/0.3.10 "
+        "SonarrGermanRelease/0.3.12 "
         "(+https://github.com/2CrAzYTV/sonarr-german-release; low-frequency metadata lookup)"
     )
 
@@ -40,7 +40,7 @@ class FernsehserienProvider:
             name=self.name,
             configured=True,
             active=True,
-            note="Kostenlose öffentliche Episodenguides · Staffel-Detailseiten · explizite deutsche TV-/Streaming-Premieren · 6h Cache",
+            note="Kostenlose öffentliche Episodenguides · Staffel-Detailseiten · Streaming/TV getrennt · 6h Cache",
         )
 
     @staticmethod
@@ -128,6 +128,15 @@ class FernsehserienProvider:
             return None
         return f"{year:04d}-{month:02d}-{day:02d}T00:00:00"
 
+    @staticmethod
+    def _release_type(premiere_type: str) -> str:
+        low = premiere_type.casefold()
+        if "streaming" in low:
+            return "streaming_de"
+        if "tv" in low:
+            return "tv_de"
+        return "de_release"
+
     @classmethod
     def _parse_dates(cls, html: str, source_url: str) -> dict[tuple[int, int], dict]:
         soup = BeautifulSoup(html, "html.parser")
@@ -146,16 +155,26 @@ class FernsehserienProvider:
             episode = int(start.group(2))
             end = starts[index + 1].start() if index + 1 < len(starts) else min(len(text), start.end() + 2500)
             block = text[start.end():end]
-            premiere = premiere_pattern.search(block)
-            if not premiere:
-                continue
-            release_date = cls._date_iso(premiere.group(2))
-            if not release_date:
+
+            premieres = []
+            for match in premiere_pattern.finditer(block):
+                release_date = cls._date_iso(match.group(2))
+                if not release_date:
+                    continue
+                premiere_type = match.group(1)
+                release_type = cls._release_type(premiere_type)
+                premieres.append((release_type, release_date, premiere_type))
+
+            if not premieres:
                 continue
 
-            premiere_type = premiere.group(1)
+            release_priority = {"streaming_de": 0, "tv_de": 1, "de_release": 2}
+            premieres.sort(key=lambda item: (release_priority.get(item[0], 99), item[1]))
+            release_type, release_date, premiere_type = premieres[0]
+
             dates[(season, episode)] = {
                 "release_date": release_date,
+                "release_type": release_type,
                 "confidence": "high",
                 "match_method": "season_episode",
                 "note": f"Deutsche {premiere_type} laut fernsehserien.de · {source_url}",
@@ -198,7 +217,6 @@ class FernsehserienProvider:
 
         target_seasons = {int(value) for value in (seasons or set()) if value is not None}
 
-        # Keep network usage predictable: at most four direct series candidates.
         for slug in slugs[:4]:
             overview_url = f"{self.base_url}/{slug}/episodenguide"
             overview_html = await self._page(overview_url)
