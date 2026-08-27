@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from . import main as core
 from .providers import FernsehserienProvider
 
-APP_VERSION = "0.3.9"
+APP_VERSION = "0.3.10"
 REFRESH_INTERVAL_SECONDS = 1800
 
 app = FastAPI(title="Sonarr German Release", version=APP_VERSION)
@@ -22,29 +22,9 @@ _refreshing = False
 _last_refresh_error: str | None = None
 
 
-def _empty_wikipedia_sync() -> dict:
-    return {
-        "checked": 0,
-        "wikidata_mapped": 0,
-        "dewiki_pages": 0,
-        "pages_checked": 0,
-        "tables_seen": 0,
-        "de_tables": 0,
-        "dated_rows": 0,
-        "matched_rows": 0,
-        "release_dates": 0,
-        "exact_matches": 0,
-        "season_title_matches": 0,
-        "combined_matches": 0,
-        "unique_title_matches": 0,
-        "coverage": [],
-        "behind_count": 0,
-        "errors": 0,
-    }
-
-
 async def enrich_fernsehserien_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
-    checked = mapped = release_dates = errors = 0
+    checked = mapped = pages_checked = season_pages = release_dates = errors = 0
+    coverage: list[dict] = []
     grouped: dict[int, list[dict]] = {}
     for episode in episodes:
         series_id = episode.get("seriesId")
@@ -57,14 +37,28 @@ async def enrich_fernsehserien_de(episodes: list[dict], series_by_id: dict[int, 
             continue
 
         checked += 1
+        target_seasons = {
+            ep.get("seasonNumber")
+            for ep in series_episodes
+            if ep.get("seasonNumber") is not None
+        }
         try:
-            payload = await fernsehserien.german_episode_dates(series)
+            payload = await fernsehserien.german_episode_dates(series, seasons=target_seasons)
+            pages_checked += payload.get("pages_checked") or 0
+            season_pages += payload.get("season_pages") or 0
+            coverage.append({
+                "series": series.get("title"),
+                "mapped": bool(payload.get("mapped")),
+                "target_seasons": sorted(target_seasons),
+                "available_seasons": payload.get("available_seasons") or [],
+                "season_pages": payload.get("season_pages") or 0,
+                "dates": len(payload.get("dates") or {}),
+            })
             if not payload.get("mapped"):
                 continue
+
             mapped += 1
             dates = payload.get("dates") or {}
-            source_url = payload.get("source_url")
-
             for episode in series_episodes:
                 key = (episode.get("seasonNumber"), episode.get("episodeNumber"))
                 observation = dates.get(key)
@@ -78,15 +72,27 @@ async def enrich_fernsehserien_de(episodes: list[dict], series_by_id: dict[int, 
                     note=observation.get("note") or "Deutscher Episodentermin laut fernsehserien.de",
                 )
                 episode["fernsehserienDE"] = observation
-                episode["fernsehserienDEUrl"] = source_url
+                episode["fernsehserienDEUrl"] = observation.get("source_url")
                 release_dates += 1
-        except Exception:
+        except Exception as exc:
             errors += 1
+            coverage.append({
+                "series": series.get("title"),
+                "mapped": False,
+                "target_seasons": sorted(target_seasons),
+                "available_seasons": [],
+                "season_pages": 0,
+                "dates": 0,
+                "error": str(exc)[:160],
+            })
 
     return {
         "checked": checked,
         "mapped": mapped,
+        "pages_checked": pages_checked,
+        "season_pages": season_pages,
         "release_dates": release_dates,
+        "coverage": coverage,
         "errors": errors,
     }
 
