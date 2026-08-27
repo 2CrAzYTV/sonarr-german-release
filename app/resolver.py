@@ -1,6 +1,7 @@
 PROVIDER_PRIORITY = [
     "manual_de",
     "wikipedia_de",
+    "fernsehserien_de",
     "tvmaze_de",
     "streaming_de",
     "tmdb_de",
