@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from . import main as core
 from .providers import FernsehserienProvider
 
-APP_VERSION = "0.3.10"
+APP_VERSION = "0.3.11"
 REFRESH_INTERVAL_SECONDS = 1800
 
 app = FastAPI(title="Sonarr German Release", version=APP_VERSION)
