@@ -22,7 +22,9 @@ from .resolver import resolve_release
 from .sonarr import SonarrClient
 from .wikipedia_matcher import match_episode_by_title
 
-app = FastAPI(title="Sonarr German Release", version="0.3.6")
+APP_VERSION = "0.3.7"
+
+app = FastAPI(title="Sonarr German Release", version=APP_VERSION)
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 tmdb = TmdbProvider()
@@ -46,6 +48,7 @@ def format_datetime_de(value: str | None) -> str:
 
 
 templates.env.globals["format_datetime_de"] = format_datetime_de
+templates.env.globals["app_version"] = APP_VERSION
 
 
 @app.on_event("startup")
@@ -60,7 +63,7 @@ async def health():
     wikipedia_status = wikipedia.status()
     return {
         "status": "ok",
-        "version": "0.3.6",
+        "version": APP_VERSION,
         "read_only": settings.read_only,
         "country": settings.country,
         "preferred_provider": settings.preferred_provider,
