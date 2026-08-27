@@ -5,12 +5,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import main as core
+from .providers import FernsehserienProvider
 
-APP_VERSION = "0.3.8"
+APP_VERSION = "0.3.9"
 REFRESH_INTERVAL_SECONDS = 1800
 
 app = FastAPI(title="Sonarr German Release", version=APP_VERSION)
 core.templates.env.globals["app_version"] = APP_VERSION
+
+fernsehserien = FernsehserienProvider()
 
 _snapshot: dict | None = None
 _snapshot_updated_at: str | None = None
@@ -40,6 +43,54 @@ def _empty_wikipedia_sync() -> dict:
     }
 
 
+async def enrich_fernsehserien_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
+    checked = mapped = release_dates = errors = 0
+    grouped: dict[int, list[dict]] = {}
+    for episode in episodes:
+        series_id = episode.get("seriesId")
+        if series_id:
+            grouped.setdefault(series_id, []).append(episode)
+
+    for series_id, series_episodes in grouped.items():
+        series = series_by_id.get(series_id) or {}
+        if not series.get("title"):
+            continue
+
+        checked += 1
+        try:
+            payload = await fernsehserien.german_episode_dates(series)
+            if not payload.get("mapped"):
+                continue
+            mapped += 1
+            dates = payload.get("dates") or {}
+            source_url = payload.get("source_url")
+
+            for episode in series_episodes:
+                key = (episode.get("seasonNumber"), episode.get("episodeNumber"))
+                observation = dates.get(key)
+                if not observation:
+                    continue
+                core.upsert_episode_release(
+                    episode,
+                    provider="fernsehserien_de",
+                    release_date=observation["release_date"],
+                    confidence=observation.get("confidence") or "high",
+                    note=observation.get("note") or "Deutscher Episodentermin laut fernsehserien.de",
+                )
+                episode["fernsehserienDE"] = observation
+                episode["fernsehserienDEUrl"] = source_url
+                release_dates += 1
+        except Exception:
+            errors += 1
+
+    return {
+        "checked": checked,
+        "mapped": mapped,
+        "release_dates": release_dates,
+        "errors": errors,
+    }
+
+
 async def build_snapshot() -> dict:
     status = await core.sonarr.system_status()
     series = await core.sonarr.series()
@@ -65,6 +116,7 @@ async def build_snapshot() -> dict:
         episode["tmdbSeriesId"] = core.get_tmdb_mapping(episode.get("seriesId"))
 
     wikipedia_sync = await core.enrich_wikipedia_de(episodes, series_by_id)
+    fernsehserien_sync = await enrich_fernsehserien_de(episodes, series_by_id)
     tvmaze_sync = await core.enrich_tvmaze_de(episodes, series_by_id)
     streaming_sync = await core.enrich_streaming_de(episodes)
 
@@ -88,9 +140,11 @@ async def build_snapshot() -> dict:
         "streaming_sync": streaming_sync,
         "tvmaze_sync": tvmaze_sync,
         "wikipedia_sync": wikipedia_sync,
+        "fernsehserien_sync": fernsehserien_sync,
         "tmdb": core.tmdb.status(),
         "tvmaze": core.tvmaze.status(),
         "wikipedia": core.wikipedia.status(),
+        "fernsehserien": fernsehserien.status(),
         "settings": core.settings,
     }
 
@@ -138,6 +192,7 @@ async def health() -> dict:
         "tmdb_api_configured": core.tmdb.status().configured,
         "tvmaze_active": core.tvmaze.status().active,
         "wikipedia_de_active": core.wikipedia.status().active,
+        "fernsehserien_de_active": fernsehserien.status().active,
         "snapshot_ready": _snapshot is not None,
         "snapshot_refreshing": _refreshing,
         "snapshot_updated_at": _snapshot_updated_at,
