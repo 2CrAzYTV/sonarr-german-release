@@ -2,6 +2,7 @@ import re
 import time
 import unicodedata
 from dataclasses import dataclass
+from urllib.parse import urljoin
 
 import httpx
 from bs4 import BeautifulSoup
@@ -18,16 +19,16 @@ class ProviderStatus:
 class FernsehserienProvider:
     """German episode-premiere provider based on public fernsehserien.de guides.
 
-    The provider deliberately uses only the series episode-guide pages and
-    accepts explicit German TV/streaming premiere dates. Responses are cached
-    for six hours to keep request volume low.
+    The series overview is used only to discover the canonical season-guide
+    links. Detailed season pages are then parsed for explicit German TV or
+    streaming premiere labels. Responses are cached for six hours.
     """
 
     name = "fernsehserien_de"
     base_url = "https://www.fernsehserien.de"
     cache_ttl_seconds = 6 * 60 * 60
     user_agent = (
-        "SonarrGermanRelease/0.3.9 "
+        "SonarrGermanRelease/0.3.10 "
         "(+https://github.com/2CrAzYTV/sonarr-german-release; low-frequency metadata lookup)"
     )
 
@@ -39,7 +40,7 @@ class FernsehserienProvider:
             name=self.name,
             configured=True,
             active=True,
-            note="Kostenlose öffentliche Episodenguides · explizite deutsche TV-/Streaming-Premieren · 6h Cache",
+            note="Kostenlose öffentliche Episodenguides · Staffel-Detailseiten · explizite deutsche TV-/Streaming-Premieren · 6h Cache",
         )
 
     @staticmethod
@@ -130,12 +131,10 @@ class FernsehserienProvider:
     @classmethod
     def _parse_dates(cls, html: str, source_url: str) -> dict[tuple[int, int], dict]:
         soup = BeautifulSoup(html, "html.parser")
-        text = soup.get_text(" ", strip=True)
-        text = re.sub(r"\s+", " ", text)
+        text = re.sub(r"\s+", " ", soup.get_text(" ", strip=True))
 
         starts = list(re.finditer(r"\bStaffel\s+(\d+)\s*,\s*Folge\s+(\d+)\b", text, flags=re.IGNORECASE))
         dates: dict[tuple[int, int], dict] = {}
-
         premiere_pattern = re.compile(
             r"\bDeutsche\s+(Streaming-Premiere|TV-Premiere|Free-TV-Premiere|Premiere)\s+"
             r"(?:[A-Za-zÄÖÜäöü]{2,3}\.?\s+)?(\d{1,2}\.\d{1,2}\.\d{4})\b",
@@ -176,7 +175,20 @@ class FernsehserienProvider:
                 candidates.append(alt)
         return candidates[:8]
 
-    async def german_episode_dates(self, series: dict) -> dict:
+    @staticmethod
+    def _season_links(html: str, overview_url: str) -> dict[int, str]:
+        soup = BeautifulSoup(html, "html.parser")
+        links: dict[int, str] = {}
+        for anchor in soup.find_all("a", href=True):
+            href = anchor.get("href") or ""
+            match = re.search(r"/episodenguide/staffel-(\d+)/(\d+)(?:[/?#]|$)", href, flags=re.IGNORECASE)
+            if not match:
+                continue
+            season = int(match.group(1))
+            links.setdefault(season, urljoin(overview_url, href))
+        return links
+
+    async def german_episode_dates(self, series: dict, seasons: set[int] | None = None) -> dict:
         titles = self._candidate_titles(series)
         slugs: list[str] = []
         for title in titles:
@@ -184,25 +196,49 @@ class FernsehserienProvider:
             if slug and slug not in slugs:
                 slugs.append(slug)
 
-        # Keep network usage predictable: at most four direct candidate pages.
+        target_seasons = {int(value) for value in (seasons or set()) if value is not None}
+
+        # Keep network usage predictable: at most four direct series candidates.
         for slug in slugs[:4]:
-            source_url = f"{self.base_url}/{slug}/episodenguide"
-            html = await self._page(source_url)
-            if not html:
+            overview_url = f"{self.base_url}/{slug}/episodenguide"
+            overview_html = await self._page(overview_url)
+            if not overview_html:
                 continue
 
-            soup = BeautifulSoup(html, "html.parser")
+            soup = BeautifulSoup(overview_html, "html.parser")
             heading = soup.find("h1")
             actual_title = heading.get_text(" ", strip=True) if heading else ""
             if not self._title_matches(titles, actual_title):
                 continue
 
-            dates = self._parse_dates(html, source_url)
+            season_links = self._season_links(overview_html, overview_url)
+            selected = [
+                (season, url)
+                for season, url in sorted(season_links.items())
+                if not target_seasons or season in target_seasons
+            ][:4]
+
+            dates: dict[tuple[int, int], dict] = {}
+            pages_checked = 1
+            season_pages = 0
+            for season, season_url in selected:
+                season_html = await self._page(season_url)
+                if not season_html:
+                    continue
+                pages_checked += 1
+                season_pages += 1
+                for key, observation in self._parse_dates(season_html, season_url).items():
+                    if key[0] == season:
+                        dates[key] = observation
+
             return {
                 "mapped": True,
                 "series_title": actual_title,
-                "source_url": source_url,
+                "source_url": overview_url,
                 "dates": dates,
+                "pages_checked": pages_checked,
+                "season_pages": season_pages,
+                "available_seasons": sorted(season_links),
             }
 
         return {
@@ -210,4 +246,7 @@ class FernsehserienProvider:
             "series_title": None,
             "source_url": None,
             "dates": {},
+            "pages_checked": 0,
+            "season_pages": 0,
+            "available_seasons": [],
         }
