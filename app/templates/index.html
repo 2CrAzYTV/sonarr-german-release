@@ -150,7 +150,22 @@
         <td>S{{ "%02d"|format(ep.seasonNumber) }}E{{ "%02d"|format(ep.episodeNumber) }}</td>
         <td>{{ ep.title or "-" }}</td>
         <td>{{ format_datetime_de(ep.airDateUtc or ep.airDate) }}</td>
-        <td>{% if result.release_date %}{{ format_datetime_de(result.release_date) }}{% else %}<span class="muted">noch nicht ermittelt</span>{% endif %}</td>
+        <td>
+          {% if result.release_date %}
+            {{ format_datetime_de(result.release_date) }}
+            {% if result.release_type %}
+              <br><span class="tag">
+                {% if result.release_type == "streaming_de" %}Streaming-Premiere
+                {% elif result.release_type == "tv_de" %}TV-Premiere
+                {% elif result.release_type == "manual_de" %}Manuell
+                {% elif result.release_type == "sonarr_fallback" %}Sonarr-Fallback
+                {% else %}DE-Premiere{% endif %}
+              </span>
+            {% endif %}
+          {% else %}
+            <span class="muted">noch nicht ermittelt</span>
+          {% endif %}
+        </td>
         <td>
           {% if ep.streamingDE and ep.streamingDE.available %}
             {% for provider in ep.streamingDE.providers %}<span class="tag">{{ provider }}</span>{% endfor %}
