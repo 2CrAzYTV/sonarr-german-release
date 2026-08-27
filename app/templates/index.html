@@ -22,7 +22,7 @@
 <body>
 <main>
   <h1>Sonarr German Release</h1>
-  <p class="muted">v{{ app_version }} · Nur-Lese-Modus · Deutschland · Wikipedia DE + TVmaze DE + optional TMDB + Sonarr</p>
+  <p class="muted">v{{ app_version }} · Nur-Lese-Modus · Deutschland · Wikipedia DE + fernsehserien.de + TVmaze DE + optional TMDB + Sonarr</p>
 
   {% if error %}
     <div class="card bad"><strong>Sonarr-Verbindung fehlgeschlagen:</strong> {{ error }}</div>
@@ -40,6 +40,7 @@
     <div class="card"><strong>Wikipedia Parser</strong><br>{{ wikipedia_sync.de_tables }} DE-Tabellen · {{ wikipedia_sync.dated_rows }} Datumszeilen · {{ wikipedia_sync.matched_rows }} nummeriert</div>
     <div class="card"><strong>Wikipedia Matcher</strong><br>{{ wikipedia_sync.exact_matches }} exakt · {{ wikipedia_sync.season_title_matches }} Staffel+Titel · {{ wikipedia_sync.combined_matches }} Titel+Nummer · {{ wikipedia_sync.unique_title_matches }} eindeutiger Titel</div>
     <div class="card"><strong>Wikipedia Staffel-Lücke</strong><br>{{ wikipedia_sync.behind_count }} Serien hinter Sonarr</div>
+    <div class="card"><strong>fernsehserien.de</strong><br>{{ fernsehserien_sync.release_dates }} Episoden · {{ fernsehserien_sync.mapped }} / {{ fernsehserien_sync.checked }} Serien · {{ fernsehserien_sync.season_pages }} Staffel-Seiten</div>
     <div class="card"><strong>TVmaze-Mappings</strong><br>{{ tvmaze_sync.mapped }} / {{ tvmaze_sync.checked }} kommende Serien</div>
     <div class="card"><strong>TVmaze DE-Daten</strong><br>{{ tvmaze_sync.release_dates }} Episoden · {{ tvmaze_sync.de_lists }} Serien</div>
     <div class="card"><strong>TMDB-Mappings</strong><br>{{ mapping.tmdb }} / {{ mapping.total }}</div>
@@ -49,6 +50,11 @@
       <strong>Wikipedia DE Provider</strong><br>
       {% if wikipedia.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht aktiv</span>{% endif %}<br>
       <span class="muted">{{ wikipedia.note }}</span>
+    </div>
+    <div class="card">
+      <strong>fernsehserien.de Provider</strong><br>
+      {% if fernsehserien.active %}<span class="ok">Aktiv</span>{% else %}<span class="warn">Nicht aktiv</span>{% endif %}<br>
+      <span class="muted">{{ fernsehserien.note }}</span>
     </div>
     <div class="card">
       <strong>TVmaze DE Provider</strong><br>
@@ -64,6 +70,7 @@
 
   <p class="muted">
     Wikipedia DE: {{ wikipedia_sync.wikidata_mapped }} von {{ wikipedia_sync.checked }} kommenden Serien exakt über Wikidata zugeordnet; {{ wikipedia_sync.dewiki_pages }} deutsche Wikipedia-Seiten gefunden; {{ wikipedia_sync.pages_checked }} Seiten und {{ wikipedia_sync.tables_seen }} Tabellen geprüft; {{ wikipedia_sync.de_tables }} Tabellen mit expliziter DE-Spalte; {{ wikipedia_sync.dated_rows }} Datumszeilen erkannt; {{ wikipedia_sync.release_dates }} kommende Episodentermine übernommen. Matching: {{ wikipedia_sync.exact_matches }} Nummern-Treffer, {{ wikipedia_sync.season_title_matches }} Staffel+Titel, {{ wikipedia_sync.combined_matches }} Titel+Nummer/Gesamtfolge, {{ wikipedia_sync.unique_title_matches }} eindeutige Titel. {{ wikipedia_sync.behind_count }} Serien haben in Wikipedia eine niedrigere höchste Staffel als in Sonarr{% if wikipedia_sync.errors %}, {{ wikipedia_sync.errors }} Fehler{% endif %}.
+    fernsehserien.de: {{ fernsehserien_sync.mapped }} von {{ fernsehserien_sync.checked }} Serien zugeordnet; {{ fernsehserien_sync.season_pages }} passende Staffel-Seiten geprüft; {{ fernsehserien_sync.release_dates }} deutsche Episodentermine übernommen{% if fernsehserien_sync.errors %}, {{ fernsehserien_sync.errors }} Fehler{% endif %}.
     TVmaze: {{ tvmaze_sync.mapped }} von {{ tvmaze_sync.checked }} kommenden Serien exakt über IMDb/TVDB zugeordnet; {{ tvmaze_sync.release_dates }} deutsche Episodentermine aus expliziten DE-Alternate-Lists{% if tvmaze_sync.errors %}, {{ tvmaze_sync.errors }} Fehler{% endif %}.
     TMDB-Mappings: {{ mapping.tmdb }} / {{ mapping.total }}.
   </p>
@@ -105,6 +112,24 @@
     </tbody>
   </table>
 
+  <h2>fernsehserien.de Diagnose</h2>
+  <table>
+    <thead>
+      <tr><th>Serie</th><th>Sonarr Staffel</th><th>Gefundene Staffeln</th><th>Staffel-Seiten</th><th>DE-Termine</th></tr>
+    </thead>
+    <tbody>
+      {% for item in fernsehserien_sync.coverage %}
+      <tr>
+        <td>{{ item.series }}</td>
+        <td>{% for season in item.target_seasons %}<span class="tag">{{ season }}</span>{% endfor %}</td>
+        <td>{% for season in item.available_seasons %}<span class="tag">{{ season }}</span>{% else %}<span class="muted">keine</span>{% endfor %}</td>
+        <td>{{ item.season_pages }}</td>
+        <td>{% if item.error %}<span class="bad">{{ item.error }}</span>{% elif item.dates %}<span class="ok">{{ item.dates }}</span>{% elif item.mapped %}<span class="warn">0</span>{% else %}<span class="muted">nicht zugeordnet</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
   <h2>Kommende Episoden</h2>
   <table>
     <thead>
@@ -118,6 +143,7 @@
           {{ ep.series.title if ep.series else "?" }}
           {% if ep.wikidataQid %}<br><span class="muted">Wikidata: {{ ep.wikidataQid }}</span>{% endif %}
           {% if ep.wikipediaDEUrl %}<br><a href="{{ ep.wikipediaDEUrl }}" target="_blank" rel="noopener noreferrer">Wikipedia DE</a>{% endif %}
+          {% if ep.fernsehserienDEUrl %}<br><a href="{{ ep.fernsehserienDEUrl }}" target="_blank" rel="noopener noreferrer">fernsehserien.de</a>{% endif %}
           {% if ep.tvmazeSeriesId %}<br><span class="muted">TVmaze: {{ ep.tvmazeSeriesId }}</span>{% endif %}
           {% if ep.tmdbSeriesId %}<br><span class="muted">TMDB: {{ ep.tmdbSeriesId }}</span>{% endif %}
         </td>
@@ -155,6 +181,7 @@
     <h2 id="credits-heading">Credits &amp; Datenquellen</h2>
     <p><a href="https://www.wikidata.org" target="_blank" rel="noopener noreferrer">Wikidata</a> wird für die exakte Zuordnung vorhandener IMDb-/TheTVDB-IDs verwendet. Strukturierte Wikidata-Daten sind unter CC0 verfügbar.</p>
     <p><a href="https://de.wikipedia.org" target="_blank" rel="noopener noreferrer">Wikipedia DE</a> wird ausschließlich über die offizielle MediaWiki Action API gelesen. Übernommen werden nur Tabellenfelder, die ausdrücklich eine deutsche oder deutschsprachige Erstausstrahlung ausweisen.</p>
+    <p><a href="https://www.fernsehserien.de" target="_blank" rel="noopener noreferrer">fernsehserien.de</a> wird mit niedriger Abfragefrequenz für öffentlich sichtbare Episodenguides verwendet. Übernommen werden ausschließlich explizit als deutsche TV-/Streaming-Premieren bezeichnete Termine.</p>
     <p><a href="https://www.tvmaze.com" target="_blank" rel="noopener noreferrer">TVmaze</a> wird über die kostenlose öffentliche API für exakte Serien-Mappings und explizite deutsche Country-Premiere-Alternate-Lists verwendet.</p>
     <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" aria-label="The Movie Database (TMDB)">
       <img class="tmdb-logo" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_1-5bdc75aaebeb75dc7ae79426ddd9be3b2be1e342510f8202baf6bffa71d7f5c4.svg" alt="TMDB">
