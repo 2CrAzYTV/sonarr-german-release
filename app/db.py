@@ -234,3 +234,19 @@ def db_stats():
         mappings = conn.execute("SELECT COUNT(*) FROM provider_mappings").fetchone()[0]
         providers = conn.execute("SELECT COUNT(DISTINCT provider) FROM episode_releases").fetchone()[0]
     return {"releases": releases, "mappings": mappings, "providers": providers}
+
+
+def prune_stale_releases(older_than_days: int = 7) -> int:
+    """Delete episode_releases rows the periodic refresh has stopped touching.
+
+    Every episode inside the rolling calendar window is re-upserted on each
+    refresh cycle, so a row whose checked_at hasn't moved in `older_than_days`
+    means the episode fell out of that window (already aired) and is safe to
+    drop instead of accumulating forever.
+    """
+    with _connect() as conn:
+        cursor = conn.execute(
+            "DELETE FROM episode_releases WHERE checked_at < datetime('now', ?)",
+            (f"-{older_than_days} days",),
+        )
+        return cursor.rowcount

@@ -16,6 +16,7 @@ from .db import (
     set_tmdb_mapping,
     upsert_episode_release,
     episode_release_map,
+    prune_stale_releases,
 )
 from .providers import TmdbProvider, TvmazeProvider, WikimediaProvider
 from .resolver import resolve_release

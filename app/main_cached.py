@@ -20,6 +20,7 @@ _snapshot_updated_at: str | None = None
 _refresh_lock = asyncio.Lock()
 _refreshing = False
 _last_refresh_error: str | None = None
+_last_pruned_releases: int = 0
 
 
 async def enrich_fernsehserien_de(episodes: list[dict], series_by_id: dict[int, dict]) -> dict:
@@ -128,6 +129,8 @@ async def build_snapshot() -> dict:
     tvmaze_sync = await core.enrich_tvmaze_de(episodes, series_by_id)
     streaming_sync = await core.enrich_streaming_de(episodes)
 
+    pruned_releases = core.prune_stale_releases()
+
     episode_ids = [episode.get("id") for episode in episodes if episode.get("id")]
     release_data = core.episode_release_map(episode_ids)
     resolved = {
@@ -143,6 +146,7 @@ async def build_snapshot() -> dict:
         "release_data": release_data,
         "resolved": resolved,
         "db": core.db_stats(),
+        "pruned_releases": pruned_releases,
         "mapping": core.mapping_stats(),
         "tmdb_sync": tmdb_sync,
         "streaming_sync": streaming_sync,
@@ -158,7 +162,7 @@ async def build_snapshot() -> dict:
 
 
 async def refresh_snapshot() -> None:
-    global _snapshot, _snapshot_updated_at, _refreshing, _last_refresh_error
+    global _snapshot, _snapshot_updated_at, _refreshing, _last_refresh_error, _last_pruned_releases
 
     if _refresh_lock.locked():
         return
@@ -170,6 +174,7 @@ async def refresh_snapshot() -> None:
             _snapshot = fresh
             _snapshot_updated_at = datetime.now(timezone.utc).isoformat()
             _last_refresh_error = None
+            _last_pruned_releases = fresh.get("pruned_releases") or 0
         except Exception as exc:
             _last_refresh_error = str(exc)[:300]
         finally:
@@ -205,6 +210,7 @@ async def health() -> dict:
         "snapshot_refreshing": _refreshing,
         "snapshot_updated_at": _snapshot_updated_at,
         "snapshot_error": _last_refresh_error,
+        "last_pruned_releases": _last_pruned_releases,
     }
 
 
