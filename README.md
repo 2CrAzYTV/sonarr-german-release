@@ -4,7 +4,7 @@ Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichung
 
 ## Aktueller Stand
 
-Version 0.3.3 ist absichtlich **read-only**:
+Version 0.3.12 ist weiterhin absichtlich **read-only** und befindet sich nach dem 48-Stunden-Teststand in der abschließenden Stabilitätsprüfung vor dem Produktions-Cleanup:
 
 - Verbindung zu Sonarr über API v3
 - Serien und kommende Episoden aus Sonarr einlesen
@@ -13,6 +13,8 @@ Version 0.3.3 ist absichtlich **read-only**:
 - Wikipedia DE für explizit gekennzeichnete deutsche/deutschsprachige Erstausstrahlungsdaten
 - mehrstufiges Wikipedia↔Sonarr-Episodenmatching
 - TVmaze DE Alternate Lists als weitere kostenlose Quelle
+- fernsehserien.de als zusätzliche Quelle für deutsche Veröffentlichungsdaten
+- Release-Typen werden ermittelt und in der WebUI dargestellt
 - TMDB bleibt optional für Mapping und DE-Streaming-Verfügbarkeit
 - SQLite-Datenbank für mehrere Quellen
 - Quellenkonflikte werden angezeigt statt still überschrieben
@@ -23,10 +25,11 @@ Version 0.3.3 ist absichtlich **read-only**:
 
 1. `manual_de` – manuell bestätigte deutsche Daten
 2. `wikipedia_de` – explizite deutsche/deutschsprachige Erstausstrahlung aus Wikipedia-DE-Tabellen
-3. `tvmaze_de` – explizite deutsche TVmaze Country-Premiere-Alternate-Lists
-4. `streaming_de` – Deutschland-spezifische Streaming-Verfügbarkeit
-5. `tmdb_de` – optionales TMDB Mapping/Fallback
-6. `sonarr_tvdb` – letzter Fallback
+3. `fernsehserien_de` – zusätzliche deutsche Episoden- und Veröffentlichungsdaten
+4. `tvmaze_de` – explizite deutsche TVmaze Country-Premiere-Alternate-Lists
+5. `streaming_de` – Deutschland-spezifische Streaming-Verfügbarkeit
+6. `tmdb_de` – optionales TMDB Mapping/Fallback
+7. `sonarr_tvdb` – letzter Fallback
 
 Normale Weltpremieren werden weder von Wikipedia noch TVmaze als deutsches Datum interpretiert.
 
@@ -116,13 +119,48 @@ Sonarr → Settings → General → Security → API Key
 
 ## Entwicklungs-Hinweis
 
-Die aktuellen Parser-/Matcher-Diagnosewerte in der WebUI sind nur für die Entwicklungsphase vorgesehen und werden vor einer öffentlichen Veröffentlichung entfernt.
+Die aktuellen Parser-/Matcher- und Quellen-Diagnosewerte in der WebUI sind nur für die Entwicklungs- und Testphase vorgesehen. Sie werden im Produktions-Cleanup entfernt oder auf produktiv notwendige Statusinformationen reduziert.
 
-## Nächste Schritte
+## Roadmap
 
-1. Abdeckung des neuen Wikipedia-Matchers mit realen Serien prüfen
-2. problematische Titel-/Nummerierungsfälle gezielt erweitern
-3. Quellenkonflikte und Confidence weiter verfeinern
-4. TMDB nur bei Bedarf optional aktivieren
-5. später Hybrid-Modus für Freigabe der Sonarr-Suche
-6. erst danach optional schreibende Sonarr-Automation
+### v0.3.12 – Stabilitätstest
+
+- 48-Stunden-Teststand abschließen
+- Quellenzuordnung auf Fehlzuordnungen prüfen
+- Release-Typen auf korrekte Erkennung und Darstellung prüfen
+- fernsehserien.de auf stabile Zuordnung und fehlerfreie Datenübernahme prüfen
+- Quellenkonflikte und Fallback-Verhalten kontrollieren
+
+### Produktions-Cleanup
+
+Nach erfolgreichem Abschluss des v0.3.12-Teststands:
+
+- Entwicklungs- und Diagnoseelemente aus der WebUI entfernen
+- Debug-Ausgaben und temporäre Testdarstellungen bereinigen
+- nur produktiv relevante Statusinformationen in der WebUI behalten
+- Repository von Test-, Diagnose- und Entwicklungsresten bereinigen
+- README und Konfigurationsdokumentation auf den tatsächlichen Produktionsstand bringen
+- Quellenprioritäten und Konfliktbehandlung abschließend dokumentieren
+- Docker-/Unraid-Konfiguration und persistente Datenpfade prüfen
+
+### v0.4.0 – Production Ready
+
+- bereinigte produktive WebUI
+- stabile Quellenzuordnung und Release-Typ-Erkennung
+- stabile Verarbeitung von fernsehserien.de, Wikipedia DE und TVmaze DE
+- nachvollziehbare Quellenkonflikte und Fallbacks
+- finale Dokumentation für Installation, Konfiguration und Updates
+- Docker-Image und Unraid-Betrieb für den produktiven Einsatz freigeben
+
+### v0.5.x – Erweiterte Sonarr-Integration
+
+- Hybrid-Modus vorbereiten
+- Sonarr-Suchen gezielt und kontrolliert freigeben
+- Read-only weiterhin als sichere Standardbetriebsart beibehalten
+
+### v1.0 – Optionale Automatisierung
+
+- optional schreibender Sonarr-Betrieb
+- kontrollierte Automatisierung auf Basis bestätigter deutscher Release-Daten
+- Schutzmechanismen gegen unsichere oder widersprüchliche Quellen
+- vollständige Produktionsdokumentation und stabile Upgrade-Pfade
