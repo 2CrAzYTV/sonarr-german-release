@@ -1,8 +1,10 @@
-from datetime import datetime, timedelta, timezone
+# Shared core: settings, provider instances, db-sync helpers and the
+# Jinja2 template environment used by app.main_cached, the actual served
+# FastAPI app (`uvicorn app.main_cached:app`). This module defines no
+# routes of its own.
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from .config import settings
@@ -23,9 +25,6 @@ from .resolver import resolve_release
 from .sonarr import SonarrClient
 from .wikipedia_matcher import match_episode_by_title
 
-APP_VERSION = "0.3.7"
-
-app = FastAPI(title="Sonarr German Release", version=APP_VERSION)
 templates = Jinja2Templates(directory="app/templates")
 sonarr = SonarrClient()
 tmdb = TmdbProvider()
@@ -49,29 +48,6 @@ def format_datetime_de(value: str | None) -> str:
 
 
 templates.env.globals["format_datetime_de"] = format_datetime_de
-templates.env.globals["app_version"] = APP_VERSION
-
-
-@app.on_event("startup")
-def startup():
-    init_db()
-
-
-@app.get("/health")
-async def health():
-    tmdb_status = tmdb.status()
-    tvmaze_status = tvmaze.status()
-    wikipedia_status = wikipedia.status()
-    return {
-        "status": "ok",
-        "version": APP_VERSION,
-        "read_only": settings.read_only,
-        "country": settings.country,
-        "preferred_provider": settings.preferred_provider,
-        "tmdb_api_configured": tmdb_status.configured,
-        "tvmaze_active": tvmaze_status.active,
-        "wikipedia_de_active": wikipedia_status.active,
-    }
 
 
 async def sync_tmdb_mappings() -> dict:
@@ -307,93 +283,3 @@ async def enrich_tvmaze_de(episodes: list[dict], series_by_id: dict[int, dict]) 
         except Exception:
             errors += 1
     return {"checked": checked, "mapped": mapped, "de_lists": de_lists, "release_dates": release_dates, "errors": errors}
-
-
-@app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    error = None
-    status = None
-    series = []
-    episodes = []
-    tmdb_sync = {"checked": 0, "mapped": 0, "errors": 0}
-    streaming_sync = {"checked": 0, "available": 0, "errors": 0}
-    tvmaze_sync = {"checked": 0, "mapped": 0, "de_lists": 0, "release_dates": 0, "errors": 0}
-    wikipedia_sync = {
-        "checked": 0,
-        "wikidata_mapped": 0,
-        "dewiki_pages": 0,
-        "pages_checked": 0,
-        "tables_seen": 0,
-        "de_tables": 0,
-        "dated_rows": 0,
-        "matched_rows": 0,
-        "release_dates": 0,
-        "exact_matches": 0,
-        "season_title_matches": 0,
-        "combined_matches": 0,
-        "unique_title_matches": 0,
-        "coverage": [],
-        "behind_count": 0,
-        "errors": 0,
-    }
-    release_data = {}
-    resolved = {}
-
-    try:
-        status = await sonarr.system_status()
-        series = await sonarr.series()
-        sync_series_mappings(series)
-        series_by_id = {item.get("id"): item for item in series if item.get("id")}
-        tmdb_sync = await sync_tmdb_mappings()
-
-        now = datetime.now(timezone.utc)
-        end = now + timedelta(days=45)
-        episodes = await sonarr.calendar(start=now.isoformat(), end=end.isoformat())
-        episodes.sort(key=lambda item: item.get("airDateUtc") or "9999")
-
-        for episode in episodes:
-            sonarr_date = episode.get("airDateUtc") or episode.get("airDate")
-            upsert_episode_release(
-                episode,
-                provider="sonarr_tvdb",
-                release_date=sonarr_date,
-                confidence="low",
-                note="Sonarr/TVDB fallback",
-            )
-            episode["tmdbSeriesId"] = get_tmdb_mapping(episode.get("seriesId"))
-
-        wikipedia_sync = await enrich_wikipedia_de(episodes, series_by_id)
-        tvmaze_sync = await enrich_tvmaze_de(episodes, series_by_id)
-        streaming_sync = await enrich_streaming_de(episodes)
-
-        episode_ids = [episode.get("id") for episode in episodes if episode.get("id")]
-        release_data = episode_release_map(episode_ids)
-        resolved = {
-            episode_id: resolve_release(observations)
-            for episode_id, observations in release_data.items()
-        }
-    except Exception as exc:
-        error = str(exc)
-
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "error": error,
-            "status": status,
-            "series": series,
-            "episodes": episodes,
-            "release_data": release_data,
-            "resolved": resolved,
-            "db": db_stats(),
-            "mapping": mapping_stats(),
-            "tmdb_sync": tmdb_sync,
-            "streaming_sync": streaming_sync,
-            "tvmaze_sync": tvmaze_sync,
-            "wikipedia_sync": wikipedia_sync,
-            "tmdb": tmdb.status(),
-            "tvmaze": tvmaze.status(),
-            "wikipedia": wikipedia.status(),
-            "settings": settings,
-        },
-    )

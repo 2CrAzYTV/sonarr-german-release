@@ -34,17 +34,6 @@
       {% if status %}<span class="ok">Verbunden</span> · {{ status.version }}{% else %}<span class="bad">Nicht verbunden</span>{% endif %}
     </div>
     <div class="card"><strong>Serien</strong><br>{{ series|length }}</div>
-    <div class="card"><strong>Wikidata-Mappings</strong><br>{{ wikipedia_sync.wikidata_mapped }} / {{ wikipedia_sync.checked }} kommende Serien</div>
-    <div class="card"><strong>Wikipedia DE-Seiten</strong><br>{{ wikipedia_sync.dewiki_pages }} / {{ wikipedia_sync.checked }} kommende Serien</div>
-    <div class="card"><strong>Wikipedia DE-Daten</strong><br>{{ wikipedia_sync.release_dates }} Episoden · {{ wikipedia_sync.pages_checked }} Seiten geprüft</div>
-    <div class="card"><strong>Wikipedia Parser</strong><br>{{ wikipedia_sync.de_tables }} DE-Tabellen · {{ wikipedia_sync.dated_rows }} Datumszeilen · {{ wikipedia_sync.matched_rows }} nummeriert</div>
-    <div class="card"><strong>Wikipedia Matcher</strong><br>{{ wikipedia_sync.exact_matches }} exakt · {{ wikipedia_sync.season_title_matches }} Staffel+Titel · {{ wikipedia_sync.combined_matches }} Titel+Nummer · {{ wikipedia_sync.unique_title_matches }} eindeutiger Titel</div>
-    <div class="card"><strong>Wikipedia Staffel-Lücke</strong><br>{{ wikipedia_sync.behind_count }} Serien hinter Sonarr</div>
-    <div class="card"><strong>fernsehserien.de</strong><br>{{ fernsehserien_sync.release_dates }} Episoden · {{ fernsehserien_sync.mapped }} / {{ fernsehserien_sync.checked }} Serien · {{ fernsehserien_sync.season_pages }} Staffel-Seiten</div>
-    <div class="card"><strong>TVmaze-Mappings</strong><br>{{ tvmaze_sync.mapped }} / {{ tvmaze_sync.checked }} kommende Serien</div>
-    <div class="card"><strong>TVmaze DE-Daten</strong><br>{{ tvmaze_sync.release_dates }} Episoden · {{ tvmaze_sync.de_lists }} Serien</div>
-    <div class="card"><strong>TMDB-Mappings</strong><br>{{ mapping.tmdb }} / {{ mapping.total }}</div>
-    <div class="card"><strong>DE-Streaming</strong><br>{{ streaming_sync.available }} / {{ streaming_sync.checked }} Staffeln</div>
     <div class="card"><strong>Release-Beobachtungen</strong><br>{{ db.releases }} · {{ db.providers }} Quellen</div>
     <div class="card">
       <strong>Wikipedia DE Provider</strong><br>
@@ -67,68 +56,6 @@
       <span class="muted">{{ tmdb.note }}</span>
     </div>
   </div>
-
-  <p class="muted">
-    Wikipedia DE: {{ wikipedia_sync.wikidata_mapped }} von {{ wikipedia_sync.checked }} kommenden Serien exakt über Wikidata zugeordnet; {{ wikipedia_sync.dewiki_pages }} deutsche Wikipedia-Seiten gefunden; {{ wikipedia_sync.pages_checked }} Seiten und {{ wikipedia_sync.tables_seen }} Tabellen geprüft; {{ wikipedia_sync.de_tables }} Tabellen mit expliziter DE-Spalte; {{ wikipedia_sync.dated_rows }} Datumszeilen erkannt; {{ wikipedia_sync.release_dates }} kommende Episodentermine übernommen. Matching: {{ wikipedia_sync.exact_matches }} Nummern-Treffer, {{ wikipedia_sync.season_title_matches }} Staffel+Titel, {{ wikipedia_sync.combined_matches }} Titel+Nummer/Gesamtfolge, {{ wikipedia_sync.unique_title_matches }} eindeutige Titel. {{ wikipedia_sync.behind_count }} Serien haben in Wikipedia eine niedrigere höchste Staffel als in Sonarr{% if wikipedia_sync.errors %}, {{ wikipedia_sync.errors }} Fehler{% endif %}.
-    fernsehserien.de: {{ fernsehserien_sync.mapped }} von {{ fernsehserien_sync.checked }} Serien zugeordnet; {{ fernsehserien_sync.season_pages }} passende Staffel-Seiten geprüft; {{ fernsehserien_sync.release_dates }} deutsche Episodentermine übernommen{% if fernsehserien_sync.errors %}, {{ fernsehserien_sync.errors }} Fehler{% endif %}.
-    TVmaze: {{ tvmaze_sync.mapped }} von {{ tvmaze_sync.checked }} kommenden Serien exakt über IMDb/TVDB zugeordnet; {{ tvmaze_sync.release_dates }} deutsche Episodentermine aus expliziten DE-Alternate-Lists{% if tvmaze_sync.errors %}, {{ tvmaze_sync.errors }} Fehler{% endif %}.
-    TMDB-Mappings: {{ mapping.tmdb }} / {{ mapping.total }}.
-  </p>
-
-  <h2>Wikipedia Staffel-Diagnose</h2>
-  <table>
-    <thead>
-      <tr><th>Serie</th><th>Wikipedia-Seite</th><th>Wikipedia Staffeln</th><th>Sonarr kommende Staffeln</th><th>Bewertung</th></tr>
-    </thead>
-    <tbody>
-      {% for item in wikipedia_sync.coverage %}
-      <tr>
-        <td>{{ item.series }}</td>
-        <td>{% if item.dewiki_title %}{{ item.dewiki_title }}{% else %}<span class="muted">keine</span>{% endif %}</td>
-        <td>
-          {% if item.wikipedia_seasons %}
-            {% for season in item.wikipedia_seasons %}<span class="tag">{{ season }}</span>{% endfor %}
-            <br><span class="muted">{{ item.rows }} nummerierte DE-Datensätze</span>
-          {% else %}
-            <span class="muted">keine DE-Staffel erkannt</span>
-          {% endif %}
-        </td>
-        <td>{% for season in item.sonarr_seasons %}<span class="tag">{{ season }}</span>{% endfor %}</td>
-        <td>
-          {% if item.error %}
-            <span class="bad">API/Parser-Fehler</span><br><span class="muted">{{ item.error }}</span>
-          {% elif item.behind %}
-            <span class="warn">Wikipedia hinter Sonarr</span><br><span class="muted">höchste Wikipedia-Staffel {{ item.highest_wikipedia }}, Sonarr {{ item.highest_sonarr }}</span>
-          {% elif item.wikipedia_seasons %}
-            <span class="ok">Staffel vorhanden</span>
-          {% elif item.dewiki_title %}
-            <span class="warn">Seite vorhanden, aber keine passende DE-Staffel</span>
-          {% else %}
-            <span class="muted">keine deutsche Wikipedia-Zuordnung</span>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <h2>fernsehserien.de Diagnose</h2>
-  <table>
-    <thead>
-      <tr><th>Serie</th><th>Sonarr Staffel</th><th>Gefundene Staffeln</th><th>Staffel-Seiten</th><th>DE-Termine</th></tr>
-    </thead>
-    <tbody>
-      {% for item in fernsehserien_sync.coverage %}
-      <tr>
-        <td>{{ item.series }}</td>
-        <td>{% for season in item.target_seasons %}<span class="tag">{{ season }}</span>{% endfor %}</td>
-        <td>{% for season in item.available_seasons %}<span class="tag">{{ season }}</span>{% else %}<span class="muted">keine</span>{% endfor %}</td>
-        <td>{{ item.season_pages }}</td>
-        <td>{% if item.error %}<span class="bad">{{ item.error }}</span>{% elif item.dates %}<span class="ok">{{ item.dates }}</span>{% elif item.mapped %}<span class="warn">0</span>{% else %}<span class="muted">nicht zugeordnet</span>{% endif %}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
 
   <h2>Kommende Episoden</h2>
   <table>

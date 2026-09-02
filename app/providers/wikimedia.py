@@ -28,7 +28,7 @@ class WikimediaProvider:
     wikidata_sparql_url = "https://query.wikidata.org/sparql"
     dewiki_api_url = "https://de.wikipedia.org/w/api.php"
     user_agent = (
-        "SonarrGermanRelease/0.3.2 "
+        "SonarrGermanRelease/0.4.0 "
         "(https://github.com/2CrAzYTV/sonarr-german-release)"
     )
 
@@ -71,7 +71,7 @@ class WikimediaProvider:
             name=self.name,
             configured=True,
             active=True,
-            note="Kostenlose Wikimedia APIs · erweiterter DE-Episodenparser · kein API-Key",
+            note="Kostenlose Wikimedia APIs · striktes Staffel- und Seiten-Mapping · kein API-Key",
         )
 
     async def _get_json(self, url: str, params: dict) -> dict:
@@ -182,8 +182,22 @@ LIMIT 5
                     results.append(page_title)
         return results
 
+    @staticmethod
+    def _normalize_page_title(value: str) -> str:
+        value = value.casefold()
+        value = re.sub(r"\s*\([^)]*\)\s*$", "", value).strip()
+        value = value.replace("–", "-").replace("—", "-")
+        value = re.sub(r"[^a-z0-9äöüß]+", " ", value)
+        return re.sub(r"\s+", " ", value).strip()
+
     async def page_candidates(self, title: str) -> list[str]:
-        """Return article plus linked/searched episode and season pages."""
+        """Return article plus linked/searched episode and season pages.
+
+        Search results and linked episode pages may contain related shows
+        from the same franchise (e.g. a "Dead City" lookup must not ingest
+        episode tables from the parent series "The Walking Dead"). Only
+        pages that clearly retain the mapped German article title are kept.
+        """
         candidates = [title]
         try:
             data = await self._parse_page(title, prop="links")
@@ -213,7 +227,37 @@ LIMIT 5
             if related and page_title not in candidates:
                 candidates.append(page_title)
 
-        return candidates[:12]
+        candidates = candidates[:12]
+
+        normalized_base = self._normalize_page_title(title)
+        base_words_norm = [w for w in normalized_base.split() if len(w) >= 3]
+
+        accepted: list[str] = []
+        for candidate in candidates:
+            normalized = self._normalize_page_title(candidate)
+
+            # Always keep the mapped article itself.
+            if candidate == title:
+                accepted.append(candidate)
+                continue
+
+            # Strongest rule: full mapped title remains present in the page name.
+            if normalized_base and normalized_base in normalized:
+                accepted.append(candidate)
+                continue
+
+            # For short titles such as "Reacher", require every meaningful base
+            # word to be present. This still allows "Reacher Episodenliste" but
+            # blocks unrelated franchise pages.
+            if base_words_norm and all(word in normalized.split() for word in base_words_norm):
+                accepted.append(candidate)
+
+        # Keep order stable and avoid duplicates.
+        unique: list[str] = []
+        for candidate in accepted:
+            if candidate not in unique:
+                unique.append(candidate)
+        return unique[:12]
 
     async def page_html(self, title: str) -> str:
         if title in self._page_cache:
@@ -389,6 +433,20 @@ LIMIT 5
                 return 88
 
         if kind == "episode":
+            # A dedicated season column must never become the episode column.
+            if low in {
+                "staffel",
+                "staffel nr.",
+                "staffel nr",
+                "staffelnr.",
+                "staffelnr",
+                "staffelnummer",
+                "season",
+            }:
+                return 0
+            if "nr. staffel" in low or "nr staffel" in low:
+                return 0
+
             if any(value in low for value in (
                 "nr. st.", "nr st.", "nr. staffel", "nr staffel",
                 "nr. in staffel", "nr in staffel", "episode in staffel",
@@ -403,10 +461,44 @@ LIMIT 5
                 return 75
 
         if kind == "season":
-            if low in ("staffel", "staffel nr.", "staffelnr.", "staffelnummer", "season"):
+            # Wikipedia episode tables often use grouped headers such as
+            # "Staffel" above columns like "Nr. (ges.)" and "Nr. (St.)". A
+            # naive parser could combine those header rows and accidentally
+            # treat an episode-number column as a season column, so only
+            # dedicated, unambiguous season headers are accepted here.
+            forbidden = (
+                "folge",
+                "episode",
+                "gesamt",
+                "nr. st",
+                "nr st",
+                "in staffel",
+                "staffelfolge",
+            )
+            if any(token in low for token in forbidden):
+                return 0
+
+            dedicated = {
+                "staffel",
+                "staffel nr.",
+                "staffel nr",
+                "staffelnr.",
+                "staffelnr",
+                "staffelnummer",
+                "season",
+                "season nr.",
+                "season nr",
+            }
+            if low in dedicated:
                 return 100
-            if "staffel" in low and "nr" in low:
+
+            # A header may contain harmless formatting text, but it must still
+            # be unmistakably a season field and not merely a grouped parent.
+            if low.startswith("staffel ") and len(low.split()) <= 2:
                 return 90
+            if low.startswith("season ") and len(low.split()) <= 2:
+                return 90
+            return 0
 
         return 0
 

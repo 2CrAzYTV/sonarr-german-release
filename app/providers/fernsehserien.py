@@ -28,7 +28,7 @@ class FernsehserienProvider:
     base_url = "https://www.fernsehserien.de"
     cache_ttl_seconds = 6 * 60 * 60
     user_agent = (
-        "SonarrGermanRelease/0.3.12 "
+        "SonarrGermanRelease/0.4.0 "
         "(+https://github.com/2CrAzYTV/sonarr-german-release; low-frequency metadata lookup)"
     )
 

@@ -4,7 +4,7 @@ Begleitdienst für Sonarr zur Ermittlung und Anzeige deutscher Veröffentlichung
 
 ## Aktueller Stand
 
-Version 0.3.12 ist weiterhin absichtlich **read-only** und befindet sich nach dem 48-Stunden-Teststand in der abschließenden Stabilitätsprüfung vor dem Produktions-Cleanup:
+Version 0.4.0 ist produktionsbereit und weiterhin absichtlich **read-only**:
 
 - Verbindung zu Sonarr über API v3
 - Serien und kommende Episoden aus Sonarr einlesen
@@ -117,40 +117,18 @@ TVmaze, Wikidata und Wikipedia benötigen keine zusätzlichen Variablen oder Zug
 
 Sonarr → Settings → General → Security → API Key
 
-## Entwicklungs-Hinweis
-
-Die aktuellen Parser-/Matcher- und Quellen-Diagnosewerte in der WebUI sind nur für die Entwicklungs- und Testphase vorgesehen. Sie werden im Produktions-Cleanup entfernt oder auf produktiv notwendige Statusinformationen reduziert.
-
 ## Roadmap
 
-### v0.3.12 – Stabilitätstest
+### v0.4.0 – Production Ready (aktuell)
 
-- 48-Stunden-Teststand abschließen
-- Quellenzuordnung auf Fehlzuordnungen prüfen
-- Release-Typen auf korrekte Erkennung und Darstellung prüfen
-- fernsehserien.de auf stabile Zuordnung und fehlerfreie Datenübernahme prüfen
-- Quellenkonflikte und Fallback-Verhalten kontrollieren
-
-### Produktions-Cleanup
-
-Nach erfolgreichem Abschluss des v0.3.12-Teststands:
-
-- Entwicklungs- und Diagnoseelemente aus der WebUI entfernen
-- Debug-Ausgaben und temporäre Testdarstellungen bereinigen
-- nur produktiv relevante Statusinformationen in der WebUI behalten
-- Repository von Test-, Diagnose- und Entwicklungsresten bereinigen
-- README und Konfigurationsdokumentation auf den tatsächlichen Produktionsstand bringen
-- Quellenprioritäten und Konfliktbehandlung abschließend dokumentieren
-- Docker-/Unraid-Konfiguration und persistente Datenpfade prüfen
-
-### v0.4.0 – Production Ready
-
-- bereinigte produktive WebUI
-- stabile Quellenzuordnung und Release-Typ-Erkennung
+- bereinigte produktive WebUI (Entwicklungs-/Diagnoseansichten aus v0.3.x entfernt, siehe unten)
+- stabile Quellenzuordnung und Release-Typ-Erkennung, verifiziert über einen mehrtägigen read-only-Teststand ohne Fehlzuordnungen
 - stabile Verarbeitung von fernsehserien.de, Wikipedia DE und TVmaze DE
-- nachvollziehbare Quellenkonflikte und Fallbacks
-- finale Dokumentation für Installation, Konfiguration und Updates
-- Docker-Image und Unraid-Betrieb für den produktiven Einsatz freigeben
+- nachvollziehbare Quellenkonflikte und Fallbacks (siehe "Quellen-Priorität" oben)
+- Wikipedia-DE-Provider zu einer einzigen Implementierung konsolidiert (vorher als versionierte Unterklassen-Kette `wikimedia_v036`/`wikimedia_v037` geführt)
+- ungenutzte Zweit-App aus `app/main.py` entfernt (Modul dient jetzt ausschließlich als gemeinsame Helper-Bibliothek für `app/main_cached.py`, den tatsächlich ausgelieferten Entrypoint)
+
+Was sich gegenüber der Entwicklungsphase geändert hat: die WebUI zeigte bis v0.3.x zusätzlich granulare Parser-/Matcher-Diagnosen pro Serie ("Wikipedia Staffel-Diagnose", "fernsehserien.de Diagnose") sowie Zwischenzähler (Wikidata-Mappings, geprüfte Seiten/Tabellen, Matching-Methoden). Das war zum Verifizieren der Zuordnungslogik während der Entwicklung nötig, ist für den produktiven Betrieb aber nicht relevant und wurde entfernt. Die Sync-Logik selbst ist unverändert.
 
 ### v0.5.x – Erweiterte Sonarr-Integration
 
