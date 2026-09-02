@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from . import main as core
 from .providers import FernsehserienProvider
 
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.4.1"
 REFRESH_INTERVAL_SECONDS = 1800
 
 app = FastAPI(title="Sonarr German Release", version=APP_VERSION)
@@ -114,14 +114,29 @@ async def build_snapshot() -> dict:
 
     for episode in episodes:
         sonarr_date = episode.get("airDateUtc") or episode.get("airDate")
-        core.upsert_episode_release(
-            episode,
-            provider="sonarr_tvdb",
-            release_date=sonarr_date,
-            release_type="sonarr_fallback",
-            confidence="low",
-            note="Sonarr/TVDB fallback",
-        )
+        series_language = ((series_by_id.get(episode.get("seriesId")) or {}).get("originalLanguage") or {}).get("name")
+        if series_language == "German":
+            # German-original productions air in Germany first - Sonarr's own
+            # date already is the German date, there is nothing to translate.
+            # Without this, these looked identical to "no German date found
+            # yet" in the resolver and the WebUI.
+            core.upsert_episode_release(
+                episode,
+                provider="sonarr_tvdb",
+                release_date=sonarr_date,
+                release_type="de_origin",
+                confidence="high",
+                note="Deutsche Originalproduktion - Sonarr-Datum ist bereits das deutsche Sendedatum",
+            )
+        else:
+            core.upsert_episode_release(
+                episode,
+                provider="sonarr_tvdb",
+                release_date=sonarr_date,
+                release_type="sonarr_fallback",
+                confidence="low",
+                note="Sonarr/TVDB fallback",
+            )
         episode["tmdbSeriesId"] = core.get_tmdb_mapping(episode.get("seriesId"))
 
     wikipedia_sync = await core.enrich_wikipedia_de(episodes, series_by_id)

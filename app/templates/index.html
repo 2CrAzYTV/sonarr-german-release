@@ -85,6 +85,7 @@
                 {% if result.release_type == "streaming_de" %}Streaming-Premiere
                 {% elif result.release_type == "tv_de" %}TV-Premiere
                 {% elif result.release_type == "manual_de" %}Manuell
+                {% elif result.release_type == "de_origin" %}Deutsche Produktion
                 {% elif result.release_type == "sonarr_fallback" %}Sonarr-Fallback
                 {% else %}DE-Premiere{% endif %}
               </span>
@@ -108,6 +109,7 @@
         <td>{% if result.provider %}{{ result.provider }}{% if result.confidence %}<br><span class="tag">{{ result.confidence }}</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
         <td>
           {% if result.conflict %}<span class="warn">Quellenkonflikt</span>
+          {% elif result.release_type == "de_origin" %}<span class="ok">deutsche Produktion</span>
           {% elif result.provider == "sonarr_tvdb" %}<span class="muted">Fallback</span>
           {% elif result.provider %}<span class="ok">aufgelöst</span>
           {% else %}<span class="muted">offen</span>{% endif %}

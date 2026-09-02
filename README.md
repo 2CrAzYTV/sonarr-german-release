@@ -33,6 +33,8 @@ Version 0.4.0 ist produktionsbereit und weiterhin absichtlich **read-only**:
 
 Normale Weltpremieren werden weder von Wikipedia noch TVmaze als deutsches Datum interpretiert.
 
+Sonderfall: Ist eine Serie laut Sonarr `originalLanguage: German` (z.B. deutsche RTL+/ProSieben-Produktionen), wird ihr Sonarr-Datum als `de_origin` markiert (hohe Konfidenz, direkt hinter `manual_de`) statt als gewöhnlicher `sonarr_tvdb`-Fallback – bei deutschen Originalproduktionen gibt es kein separates deutsches Übersetzungsdatum zu finden.
+
 ## Wikidata + Wikipedia DE
 
 Der Wikimedia-Provider benötigt **keinen API-Key** und keine Registrierung.
@@ -119,7 +121,11 @@ Sonarr → Settings → General → Security → API Key
 
 ## Roadmap
 
-### v0.4.0 – Production Ready (aktuell)
+### v0.4.1
+
+- Serien mit `originalLanguage: German` (laut Sonarr) bekommen einen eigenen Release-Typ `de_origin` (hohe Konfidenz) statt als generischer Sonarr-Fallback zu erscheinen. Bei deutschen Originalproduktionen (z.B. RTL+/ProSieben-Formate) ist das Sonarr-Datum bereits das deutsche Sendedatum, es gibt nichts zu übersetzen.
+
+### v0.4.0 – Production Ready
 
 - bereinigte produktive WebUI (Entwicklungs-/Diagnoseansichten aus v0.3.x entfernt, siehe unten)
 - stabile Quellenzuordnung und Release-Typ-Erkennung, verifiziert über einen mehrtägigen read-only-Teststand ohne Fehlzuordnungen

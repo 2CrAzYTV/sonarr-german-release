@@ -10,10 +10,11 @@ PROVIDER_PRIORITY = [
 
 RELEASE_TYPE_PRIORITY = {
     "manual_de": 0,
-    "streaming_de": 1,
-    "tv_de": 2,
-    "de_release": 3,
-    "sonarr_fallback": 4,
+    "de_origin": 1,
+    "streaming_de": 2,
+    "tv_de": 3,
+    "de_release": 4,
+    "sonarr_fallback": 5,
 }
 
 CONFIDENCE_ORDER = {
